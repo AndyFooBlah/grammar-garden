@@ -156,7 +156,7 @@ Result: roughly half of each parent's rules, as you described. The child records
 
 ### 6.2 Mutation
 
-Each rule in the child mutates independently with probability **mutation rate** (default 15%). One of, chosen at random:
+Each rule in the child mutates independently with probability **mutation rate** (default 35%, raised from 15% after playtesting). One of, chosen at random:
 - insert a random symbol at a random position;
 - delete one symbol;
 - replace one symbol with another;
@@ -210,7 +210,7 @@ All sounds are synthesized in the browser with the Web Audio API, so there are n
 
 | Event | Sound |
 |---|---|
-| Rain starts / stops | Filtered noise fading in and out, very quiet, loops while raining |
+| Rain starts in either zone | A four-second shower of filtered noise, fading in and out (no loop: with two climates it is nearly always raining somewhere) |
 | Seed planted | Soft water-drop "plip": a quiet low sine sliding down, low-passed so it has no click |
 | Bee visits a flower | Low buzzy hum, ~0.3 s |
 | Butterfly visits a flower | Two or three soft breathy puffs |

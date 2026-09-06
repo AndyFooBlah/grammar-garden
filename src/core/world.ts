@@ -72,7 +72,7 @@ export const DEFAULT_SETTINGS: Settings = {
   turnAngle: 15,
   stepPx: 12,
   maxLoad: 12,
-  mutationRate: 0.15,
+  mutationRate: 0.35,
   allowSelfing: false,
   fieldWidth: 3600,
   skyHeight: 320,

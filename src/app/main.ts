@@ -86,7 +86,7 @@ function handleEvents(events: WorldEvent[]): void {
         sounds.rustle();
         break;
       case 'weather':
-        sounds.setRain(world.anyRain());
+        if (e.kind === 'rain') sounds.rainShower();
         break;
     }
   }
@@ -503,7 +503,7 @@ $('btn-step').addEventListener('click', () => {
 });
 $('btn-rain').addEventListener('click', () => {
   world.rainNow();
-  sounds.setRain(true);
+  sounds.rainShower();
   refreshStats();
 });
 
@@ -654,7 +654,6 @@ function replaceWorld(next: World): void {
   acc = 0;
   zoomFit();
   populationKey = '';
-  sounds.setRain(world.anyRain());
   syncSettingsUi();
   refreshStats();
   refreshInspector();
@@ -708,10 +707,7 @@ mute.addEventListener('click', toggleMute);
 mute.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' || e.key === ' ') toggleMute();
 });
-const unlock = () => {
-  sounds.unlock();
-  sounds.setRain(world.anyRain());
-};
+const unlock = () => sounds.unlock();
 document.addEventListener('pointerdown', unlock, { capture: true });
 document.addEventListener('keydown', unlock, { capture: true });
 

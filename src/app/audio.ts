@@ -168,31 +168,32 @@ export class Sounds {
     src.stop(t + 0.5);
   }
 
-  /** Very quiet filtered noise while it rains. */
-  setRain(on: boolean): void {
+  /** A few seconds of soft rain when a spell starts, fading in and out. Never loops. */
+  rainShower(seconds = 4): void {
     if (!this.ready) return;
     const ctx = this.ctx!;
     const t = ctx.currentTime;
-    if (on && !this.rain) {
-      const src = ctx.createBufferSource();
-      src.buffer = this.noise();
-      src.loop = true;
-      const filter = ctx.createBiquadFilter();
-      filter.type = 'lowpass';
-      filter.frequency.value = 1200;
-      const gain = ctx.createGain();
-      gain.gain.setValueAtTime(0.0001, t);
-      gain.gain.exponentialRampToValueAtTime(0.05, t + 1.5);
-      src.connect(filter).connect(gain).connect(this.master!);
-      src.start(t);
-      this.rain = { src, gain };
-    } else if (!on && this.rain) {
-      const { src, gain } = this.rain;
-      gain.gain.cancelScheduledValues(t);
-      gain.gain.setValueAtTime(gain.gain.value, t);
-      gain.gain.exponentialRampToValueAtTime(0.0001, t + 1.5);
-      src.stop(t + 1.6);
-      this.rain = null;
+    if (this.rain) {
+      // A shower is already playing; let it run rather than stacking another.
+      return;
     }
+    const src = ctx.createBufferSource();
+    src.buffer = this.noise();
+    src.loop = true;
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 1200;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(0.04, t + 1);
+    gain.gain.setValueAtTime(0.04, t + seconds - 1.5);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + seconds);
+    src.connect(filter).connect(gain).connect(this.master!);
+    src.start(t);
+    src.stop(t + seconds + 0.1);
+    this.rain = { src, gain };
+    src.onended = () => {
+      if (this.rain?.src === src) this.rain = null;
+    };
   }
 }
