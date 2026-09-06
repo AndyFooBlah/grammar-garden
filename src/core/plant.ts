@@ -7,6 +7,7 @@ export interface GeometrySettings {
   turnAngle: number;
   stepPx: number;
   maxLoad: number; // in step lengths
+  maxWoodLoad: number; // in step lengths
   maxSymbols: number;
 }
 
@@ -29,7 +30,7 @@ export function growPlant(dna: string, steps: number, s: GeometrySettings): Grow
   const problems = validateDna(rules);
   const g = grow(rules, steps, s.maxSymbols);
   const geo = interpret(g.str, s.turnAngle, s.stepPx);
-  const verdict = checkStructure(geo, s.maxLoad * s.stepPx);
+  const verdict = checkStructure(geo, s.maxLoad * s.stepPx, s.maxWoodLoad * s.stepPx);
   return {
     rules,
     problems,

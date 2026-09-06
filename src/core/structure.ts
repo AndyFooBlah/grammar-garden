@@ -1,12 +1,13 @@
 /**
  * Structural viability checks. A plant collapses if any of these fail:
  *   1. two of its segments properly cross (touching at endpoints is fine);
- *   2. a green segment holds up more plant than the max unsupported load;
+ *   2. a green segment holds up more plant than the max unsupported load, or a
+ *      wood segment more than the (larger) wood limit;
  *   3. any segment dips below the ground line.
  */
 import type { Geometry, Segment } from './turtle';
 
-export type FailReason = 'crossing' | 'load' | 'underground';
+export type FailReason = 'crossing' | 'load' | 'woodload' | 'underground';
 
 export type Verdict = { ok: true } | { ok: false; reason: FailReason; segs: number[] };
 
@@ -71,7 +72,7 @@ export function loadsAbove(segs: Segment[]): Float64Array {
   return load;
 }
 
-export function checkStructure(geo: Geometry, maxLoadPx: number): Verdict {
+export function checkStructure(geo: Geometry, maxLoadPx: number, maxWoodLoadPx = Infinity): Verdict {
   const { segs } = geo;
   for (let i = 0; i < segs.length; i++) {
     if (segs[i].y2 > EPS || segs[i].y1 > EPS) return { ok: false, reason: 'underground', segs: [i] };
@@ -80,14 +81,16 @@ export function checkStructure(geo: Geometry, maxLoadPx: number): Verdict {
   if (cross) return { ok: false, reason: 'crossing', segs: cross };
   const load = loadsAbove(segs);
   let worst = -1;
-  let worstLoad = maxLoadPx;
+  let worstOver = 0;
   for (let i = 0; i < segs.length; i++) {
-    if (segs[i].pen === 'g' && load[i] > worstLoad + EPS) {
+    const limit = segs[i].pen === 'g' ? maxLoadPx : maxWoodLoadPx;
+    const over = load[i] - limit;
+    if (over > EPS && over > worstOver) {
       worst = i;
-      worstLoad = load[i];
+      worstOver = over;
     }
   }
-  if (worst >= 0) return { ok: false, reason: 'load', segs: [worst] };
+  if (worst >= 0) return { ok: false, reason: segs[worst].pen === 'g' ? 'load' : 'woodload', segs: [worst] };
   return { ok: true };
 }
 
@@ -98,6 +101,8 @@ export function describeVerdict(v: Verdict): string {
       return 'Tangled: two lines cross';
     case 'load':
       return 'Floppy: a green stem holds too much';
+    case 'woodload':
+      return 'Snapped: even wood can only hold so much';
     case 'underground':
       return 'Grows down into the dirt';
   }

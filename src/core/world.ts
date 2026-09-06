@@ -36,6 +36,8 @@ export interface Settings {
   turnAngle: number;
   stepPx: number;
   maxLoad: number;
+  /** What a wood segment can hold up, in step lengths. Higher than green, not infinite. */
+  maxWoodLoad: number;
   mutationRate: number;
   allowSelfing: boolean;
   fieldWidth: number;
@@ -75,6 +77,7 @@ export const DEFAULT_SETTINGS: Settings = {
   turnAngle: 15,
   stepPx: 12,
   maxLoad: 12,
+  maxWoodLoad: 60,
   mutationRate: 0.35,
   allowSelfing: false,
   fieldWidth: 3600,
@@ -92,7 +95,7 @@ export const DEFAULT_SETTINGS: Settings = {
 };
 
 /** Settings that change plant geometry; changing one regrows every plant. */
-const GEOMETRY_KEYS: (keyof Settings)[] = ['turnAngle', 'stepPx', 'maxLoad', 'maxSymbols'];
+const GEOMETRY_KEYS: (keyof Settings)[] = ['turnAngle', 'stepPx', 'maxLoad', 'maxWoodLoad', 'maxSymbols'];
 
 /** Energy drained per tick past the lifespan, growing each tick so old plants always fade out. */
 const OLD_AGE_DRAIN = 3;

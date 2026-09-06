@@ -70,7 +70,7 @@ The turtle starts at the plant's seed position on the ground line, pointing stra
 After every growth step, each plant's geometry is checked. A plant that fails any check **collapses**: a short crack sound plays, the plant is drawn falling over and fading, and it is removed. Collapse happens immediately, regardless of age.
 
 1. **No crossing lines.** Any two segments that properly intersect (cross at an interior point) is a failure. Touching at an endpoint or overlapping along the same line (as `f` then `b` does) is fine, because that is how branching and retracing naturally work. Checked with a uniform spatial grid so it stays fast for a few thousand segments.
-2. **Sturdiness (the wood rule).** Every green segment is asked "how much plant are you holding up?" — the total length of all segments above it in the tree, including any wood higher up. If that load exceeds the **max unsupported load** setting (default: 12 step-lengths), the stem snaps. Wood segments can hold anything. So a plant needs wood at the bottom of any big structure, and wood sitting on top of a green stem doesn't help.
+2. **Sturdiness (the wood rule).** Every segment is asked "how much plant are you holding up?" — the total length of all segments above it in the tree. A green segment snaps if that load exceeds the **green stem strength** setting (default 12 step-lengths); a wood segment holds far more but not everything: the **wood strength** setting (default 60 step-lengths, added in v4) caps it, so no plant can grow without limit. A plant needs wood at the bottom of any big structure, and wood sitting on top of a green stem doesn't help.
 3. **No growing into the dirt.** A segment that goes below the ground line is a failure. (Alternative: clip it silently. Failure is simpler to explain: "plants can't grow down into the ground".)
 
 The inspector shows *why* a plant collapsed and highlights the offending segment in red, and the DNA editor previews all three checks live as you type, so a kid can fix a recipe before planting it.
@@ -157,14 +157,21 @@ Result: roughly half of each parent's rules, as you described. The child records
 
 ### 6.2 Mutation
 
-Each rule in the child mutates independently with probability **mutation rate** (default 35%, raised from 15% after playtesting). One of, chosen at random:
+Each rule in the child mutates independently with probability **mutation rate** (default 35%, raised from 15% after playtesting). One of, weighted:
 - insert a random symbol at a random position;
 - delete one symbol;
 - replace one symbol with another;
 - duplicate a short chunk in place (this is how `f` becomes `ff` becomes `ffff` — plants get taller);
-- add a brand-new branch `[…]` containing one or two random symbols.
+- add a brand-new branch `[…]` containing one or two random symbols;
+- point a letter at a different rule.
 
-Brackets are always inserted and deleted as matched pairs so the rule stays well-formed. The inspector marks mutated rules with a small ✨ so a kid can spot what changed compared with the parents.
+On top of that, with probability half the mutation rate, the **genome itself** changes (v4):
+- **a new letter**: an unused letter gets a short random rule of its own and a reference to it is spliced into an existing rule;
+- **gene duplication**: an existing rule is copied under a new letter and one reference is re-pointed at the copy, so the two can drift apart in later generations;
+- **housekeeping**: a rule that nothing refers to any more is dropped;
+- **transposition**: a balanced chunk is cut from one rule and pasted into another.
+
+A recipe never has more than eight letters. Brackets are always inserted and deleted as matched pairs so rules stay well-formed. The inspector marks mutated rules with a small ✨ (new letters included) so a kid can spot what changed compared with the parents.
 
 ## 7. Screen layout
 

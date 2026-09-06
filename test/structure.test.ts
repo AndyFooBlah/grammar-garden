@@ -66,3 +66,11 @@ describe('checkStructure', () => {
     expect(checkStructure(interpret('b', 15, 10), 120)).toMatchObject({ ok: false, reason: 'underground' });
   });
 });
+
+describe('wood limit', () => {
+  it('snaps wood that holds more than the wood limit', () => {
+    const tower = interpret('w' + 'f'.repeat(30), 15, 10);
+    expect(checkStructure(tower, 120, 600).ok).toBe(true);
+    expect(checkStructure(tower, 120, 200)).toMatchObject({ ok: false, reason: 'woodload', segs: [0] });
+  });
+});

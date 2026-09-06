@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { crossover, mutate, mutateRule, randomDna } from '../src/core/genetics';
+import { crossover, MAX_RULES, mutate, mutateGenome, mutateRule, randomDna } from '../src/core/genetics';
 import { cleanSymbols, formatDna, parseDna } from '../src/core/grammar';
 import { Rng } from '../src/core/rng';
 
@@ -45,7 +45,7 @@ describe('mutate', () => {
     const rules = parseDna('A=fB;B=fy');
     expect(mutate(rules, 0, new Rng(1))).toEqual({ rules, mutated: [] });
     const m = mutate(rules, 1, new Rng(1));
-    expect(m.mutated).toEqual(['A', 'B']);
+    expect(m.mutated).toEqual(expect.arrayContaining(['A', 'B']));
   });
 });
 
@@ -57,5 +57,47 @@ describe('randomDna', () => {
       expect(rules.A.length).toBeGreaterThan(0);
       expect(parseDna(formatDna(rules))).toEqual(rules);
     }
+  });
+});
+
+describe('mutateGenome', () => {
+  it('can invent a new letter with a rule and wire it in', () => {
+    const rng = new Rng(5);
+    let seen = false;
+    for (let i = 0; i < 200 && !seen; i++) {
+      const r = mutateGenome(parseDna('A=wfB;B=gfp'), rng);
+      if (r.kind === 'newrule') {
+        seen = true;
+        expect(Object.keys(r.rules)).toHaveLength(3);
+        const letter = r.touched[0];
+        expect(r.rules[letter]).toBeDefined();
+        expect(Object.values(r.rules).some((b) => b.includes(letter))).toBe(true);
+      }
+    }
+    expect(seen).toBe(true);
+  });
+  it('duplicates a rule and re-points a reference at the copy', () => {
+    const rng = new Rng(8);
+    let seen = false;
+    for (let i = 0; i < 200 && !seen; i++) {
+      const r = mutateGenome(parseDna('A=wfB;B=gfp'), rng);
+      if (r.kind === 'copyrule') {
+        seen = true;
+        const letter = r.touched[0];
+        expect(['wfB', 'gfp']).toContain(r.rules[letter]);
+        expect(Object.values(r.rules).some((b) => b.includes(letter))).toBe(true);
+      }
+    }
+    expect(seen).toBe(true);
+  });
+  it('drops unused rules and never exceeds the letter limit', () => {
+    const rng = new Rng(2);
+    const r = mutateGenome(parseDna('A=fB;B=fy;C=ff'), rng);
+    if (r.kind === 'droprule') expect(r.rules.C).toBeUndefined();
+    let rules = parseDna('A=fB;B=fy');
+    for (let i = 0; i < 300; i++) rules = mutate(rules, 1, rng).rules;
+    expect(Object.keys(rules).length).toBeLessThanOrEqual(MAX_RULES);
+    for (const body of Object.values(rules)) expect(balanced(body)).toBe(true);
+    expect(rules.A).toBeDefined();
   });
 });

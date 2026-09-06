@@ -613,6 +613,7 @@ const SPECS: Spec[] = [
   { key: 'turnAngle', label: 'Turn angle', min: 5, max: 90, step: 5, format: (v) => `${v}°` },
   { key: 'stepPx', label: 'Step size', min: 2, max: 30, step: 1, format: (v) => `${v} px` },
   { key: 'maxLoad', label: 'Green stem strength', min: 1, max: 60, step: 1, format: (v) => `${v} steps` },
+  { key: 'maxWoodLoad', label: 'Wood strength', min: 5, max: 400, step: 5, format: (v) => `${v} steps` },
   { key: 'sunPower', label: 'Sun strength', min: 0.1, max: 2, step: 0.05, format: (v) => v.toFixed(2) },
   { key: 'rainLight', label: 'Light in rain', min: 0, max: 1, step: 0.05, format: pctFmt },
   { key: 'baseUpkeep', label: 'Cost of living', min: 0, max: 3, step: 0.1, format: (v) => v.toFixed(1) },
