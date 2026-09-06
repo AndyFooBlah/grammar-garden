@@ -88,7 +88,7 @@ Segments are treated as 4 px wide so a vertical stem still catches a little ligh
 **Income:** captured light × sun strength (default 0.6), in full on sunny ticks and at 30% during rain.
 **Upkeep every tick:** a base cost of living (0.6, paid by seeds too), 0.05 per wood segment, 0.01 per green segment, and 0.25 per flower. Past the lifespan an old-age drain is added that grows every tick, so old plants always fade out.
 
-Energy at zero means the plant **starves**. A seed starts with 50 energy and no green, so a recipe that never grows leaves dies within about 80 ticks. This replaces the old "shaded root" rule and is what makes room matter: seed spacing is now only 12 px, and a seedling under a big canopy simply cannot earn enough. The selection pressures a child can watch: grow taller than the neighbours, spread green sideways, don't carry more flowers than the sunlight pays for.
+Energy at zero means the plant **starves**. A seed starts with 50 energy and no green, so a recipe that never grows leaves dies within about 80 ticks. This replaces the old "shaded root" rule and is what makes room matter: seed spacing is now only 6 px, and a seedling under a big canopy simply cannot earn enough. The selection pressures a child can watch: grow taller than the neighbours, spread green sideways, don't carry more flowers than the sunlight pays for.
 
 The starter recipes at full sun, from the calibration script: Bramble nets about +3.5 energy per tick, Candle with its 22 flowers about +1, Tower (all wood) −1.2, a bare seed −0.6.
 
@@ -99,7 +99,7 @@ The field is split down the middle into a **left** and a **right climate**, each
 - **Weather per zone.** Each zone alternates rain and sun spells. Two settings shape it: the zone's **rain fraction** (average share of rainy ticks; left 20% and right 50% by default) and a shared **cycle length** (28 ticks by default). A spell's length is its share of the cycle with ±25% jitter, so the two zones drift out of step. Cycle length 2 alternates every tick; 200 gives a hundred of each. Growth happens during a plant's own zone's rain.
 - **Soil moisture** (0–100%) rises linearly while it rains (10% per tick) and falls linearly in the sun (4% per tick). The dirt colour goes from pale and dry to dark and wet, and a badge over each zone shows the weather, ticks to go, and soil percentage.
 - **Water need.** Each plant needs the soil to be at least as wet as 1% × (green segments + 2 × flowers + 0.2 × wood segments), capped at 100%. Green and flowers are thirsty; wood hardly at all. The inspector shows the need next to the current soil.
-- **Thirst.** When the soil is drier than the need, the plant loses 3 energy per tick for every 10% of the shortfall. Big leafy plants in dry soil die within a few ticks; a small deficit is a slow drain. **Died of thirst** is its own death reason and statistic.
+- **Thirst.** When the soil is drier than the need, the plant loses 8 energy per tick for every 10% of the shortfall (raised from 3 after playtesting: dry soil should really hurt). Big leafy plants in dry soil die within a few ticks; a small deficit is a slow drain. **Died of thirst** is its own death reason and statistic.
 - **Bugs** only work where the sun is out. If one zone rains, they fly to the other; if both rain they shelter at the field's edges as before.
 
 The intended pressures: in the wet zone light is scarce (30% during rain) so plants need more green to pay their way; in the dry zone water is scarce so green and flowers cost water and wood-heavy, modest plants win. "Rain now" starts rain in both zones.
@@ -125,7 +125,7 @@ seed ──rain──▶ sprout ──rain──▶ growing ──▶ mature ─
 - **Seed**: a small brown dot on the ground. Shows its DNA when clicked.
 - **Growing**: takes one growth step per tick while it is raining. Stops when it reaches the max-steps limit, the string-length limit, or its string stops changing (no variables left). Then it is **mature**.
 - **Energy**: 0–100, shown as a bar in the inspector with the net change per tick (see section 3b). At 0 the plant starves; past the lifespan the old-age drain finishes it. Either way: a soft rustle, it fades, and its space is freed. Starving plants are drawn faded so trouble is visible before it happens.
-- **Room**: the world has a max plant count (40) and a minimum seed spacing (12 px). Bugs won't drop a seed if there is no room; the seed is simply lost (a quiet "plip" doesn't play, so the kid learns that silence means the field is full). Shade does the real spacing.
+- **Room**: the world has a max plant count (40) and a minimum seed spacing (6 px). Bugs won't drop a seed if there is no room; the seed is simply lost (a quiet "plip" doesn't play, so the kid learns that silence means the field is full). Shade does the real spacing.
 
 ## 5. Weather and time
 
