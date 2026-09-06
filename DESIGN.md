@@ -44,7 +44,7 @@ Each rule is `Variable=replacement`. The start string is always `A`.
 
 Anything else (spaces, unknown characters) is ignored so that editing is forgiving.
 
-**Decision:** `[` and `]` were not in the original college grammar. Without them, the only way to make a side branch is to walk out with `f` and back with `b`, which retraces the same line. Brackets make bushy, tree-like shapes easy and are the standard L-system convention. The editor keeps them balanced automatically (an unmatched `]` is ignored; unclosed branches are closed at the end).
+**Decision:** `[` and `]` were not in the grammar this game was first sketched from. Without them, the only way to make a side branch is to walk out with `f` and back with `b`, which retraces the same line. Brackets make bushy, tree-like shapes easy and are the standard L-system convention. The editor keeps them balanced automatically (an unmatched `]` is ignored; unclosed branches are closed at the end).
 
 ### 2.2 Growth
 
@@ -153,7 +153,7 @@ Take the set of variable names that appear in either parent. For each:
 - Present in only one parent → included with 50% probability.
 - `A` is always present (every parent has it).
 
-Result: roughly half of each parent's rules, as you described. The child records both parents' names and its generation number (max parent generation + 1) so the family tree can be shown in the inspector.
+Result: roughly half of each parent's rules. The child records both parents' names and its generation number (max parent generation + 1) so the family tree can be shown in the inspector.
 
 ### 6.2 Mutation
 
