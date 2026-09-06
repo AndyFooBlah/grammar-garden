@@ -1,9 +1,10 @@
 /**
- * The garden: plants, bugs, weather and time. A pure state machine driven by a
- * seeded RNG, so a saved garden replays identically.
+ * The garden: plants, bugs, weather, sunlight and time. A pure state machine
+ * driven by a seeded RNG, so a saved garden replays identically.
  */
 import { crossover, mutate, randomDna } from './genetics';
 import { formatDna, parseDna } from './grammar';
+import { computeLight, type LightMap } from './light';
 import { randomName } from './names';
 import { growPlant, type GrownPlant } from './plant';
 import { Rng } from './rng';
@@ -24,48 +25,68 @@ export interface Settings {
   stepPx: number;
   maxLoad: number;
   mutationRate: number;
-  shadeMargin: number;
   allowSelfing: boolean;
   fieldWidth: number;
   skyHeight: number;
   bugSpeed: number;
   visitChance: number;
+  /** Energy gained per unit of captured light on a sunny tick. */
+  sunPower: number;
+  /** Fraction of sunlight that still gets through on a rainy tick. */
+  rainLight: number;
+  /** Energy every plant pays per tick just to stay alive (seeds included). */
+  baseUpkeep: number;
+  woodUpkeep: number;
+  greenUpkeep: number;
+  flowerUpkeep: number;
+  startEnergy: number;
+  energyMax: number;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   tickMs: 1000,
   sunTicks: 20,
   rainTicks: 8,
-  lifespan: 150,
+  lifespan: 400,
   bees: 2,
   butterflies: 2,
-  maxPlants: 30,
-  seedSpacing: 40,
+  maxPlants: 40,
+  seedSpacing: 12,
   maxSteps: 12,
   maxSymbols: 200,
   turnAngle: 15,
   stepPx: 12,
   maxLoad: 12,
   mutationRate: 0.15,
-  shadeMargin: 10,
   allowSelfing: false,
   fieldWidth: 1200,
   skyHeight: 320,
   bugSpeed: 150,
   visitChance: 0.6,
+  sunPower: 0.6,
+  rainLight: 0.3,
+  baseUpkeep: 0.6,
+  woodUpkeep: 0.05,
+  greenUpkeep: 0.01,
+  flowerUpkeep: 0.25,
+  startEnergy: 50,
+  energyMax: 100,
 };
 
 /** Settings that change plant geometry; changing one regrows every plant. */
 const GEOMETRY_KEYS: (keyof Settings)[] = ['turnAngle', 'stepPx', 'maxLoad', 'maxSymbols'];
 
-const SHADE_DAMAGE = 4;
-const OLD_AGE_DAMAGE = 3;
+/** Energy drained per tick past the lifespan, growing each tick so old plants always fade out. */
+const OLD_AGE_DRAIN = 3;
+const OLD_AGE_RAMP = 0.3;
 export const DYING_TICKS = 3;
 const SKY_BOTTOM = 40;
 const EDGE_MARGIN = 20;
+/** Lineage records kept beyond the living population, oldest pruned first. */
+const LINEAGE_CAP = 4000;
 
 export type Stage = 'seed' | 'growing' | 'mature' | 'dying';
-export type DeathReason = 'collapsed' | 'shaded' | 'old';
+export type DeathReason = 'collapsed' | 'starved' | 'old';
 export type WeatherKind = 'sun' | 'rain';
 
 export interface ParentRef {
@@ -80,15 +101,32 @@ export interface Plant {
   x: number;
   steps: number;
   age: number;
-  health: number;
+  /** Stored energy, 0..energyMax. At 0 the plant starves. */
+  energy: number;
+  /** Energy gained from sunlight last tick. */
+  sun: number;
+  /** Energy spent on upkeep last tick. */
+  upkeep: number;
   stage: Stage;
   generation: number;
   parents: ParentRef[];
   /** Rule names that mutated when this plant was born. */
   mutated: string[];
-  shaded: boolean;
   deathReason?: DeathReason;
   dyingTicks?: number;
+}
+
+/** Everything the family tree needs to know about a plant, kept after it dies. */
+export interface LineageRecord {
+  id: number;
+  name: string;
+  dna: string;
+  generation: number;
+  parents: ParentRef[];
+  mutated: string[];
+  born: number;
+  died?: number;
+  fate?: DeathReason | 'removed';
 }
 
 export type BugKind = 'bee' | 'butterfly';
@@ -128,7 +166,7 @@ export interface Stats {
   planted: number;
   born: number;
   collapsed: number;
-  shaded: number;
+  starved: number;
   old: number;
   visits: number;
 }
@@ -139,7 +177,7 @@ export interface Weather {
 }
 
 export interface SaveFile {
-  version: 1;
+  version: 2;
   savedAt: string;
   tick: number;
   weather: Weather;
@@ -148,8 +186,12 @@ export interface SaveFile {
   stats: Stats;
   plants: Plant[];
   bugs: Bug[];
+  lineage: LineageRecord[];
   nextId: number;
 }
+
+/** Saves written before the energy model and lineage archive existed. */
+type SaveFileV1 = Omit<SaveFile, 'version' | 'lineage'> & { version: 1 };
 
 interface CacheEntry {
   key: string;
@@ -160,11 +202,16 @@ export class World {
   tick = 0;
   weather: Weather = { kind: 'sun', ticksLeft: DEFAULT_SETTINGS.sunTicks };
   settings: Settings;
-  stats: Stats = { planted: 0, born: 0, collapsed: 0, shaded: 0, old: 0, visits: 0 };
+  stats: Stats = { planted: 0, born: 0, collapsed: 0, starved: 0, old: 0, visits: 0 };
   plants: Plant[] = [];
   bugs: Bug[] = [];
+  lineage = new Map<number, LineageRecord>();
   nextId = 1;
   rng: Rng;
+  /** Sunlight map from the last update; null before the first tick. */
+  light: LightMap | null = null;
+  /** Bumped whenever the light map changes, so renderers can cache. */
+  lightVersion = 0;
   private cache = new Map<number, CacheEntry>();
 
   constructor(settings: Partial<Settings> = {}, seed = Date.now() % 2147483647) {
@@ -187,6 +234,7 @@ export class World {
       w.addSeed(recipes[ri], { x, silent: true });
     });
     w.syncBugs();
+    w.updateLight();
     return w;
   }
 
@@ -245,22 +293,49 @@ export class World {
       x,
       steps: 0,
       age: 0,
-      health: 100,
+      energy: this.settings.startEnergy,
+      sun: 0,
+      upkeep: 0,
       stage: 'seed',
       generation: opts.generation ?? 0,
       parents: opts.parents ?? [],
       mutated: opts.mutated ?? [],
-      shaded: false,
     };
     this.plants.push(plant);
+    this.lineage.set(plant.id, {
+      id: plant.id,
+      name: plant.name,
+      dna: plant.dna,
+      generation: plant.generation,
+      parents: plant.parents.map((r) => ({ ...r })),
+      mutated: [...plant.mutated],
+      born: this.tick,
+    });
+    this.pruneLineage();
     if (!opts.silent) this.stats.planted++;
     return plant;
   }
 
+  /** Drop the oldest dead records once the archive gets big, never a living plant's. */
+  private pruneLineage(): void {
+    if (this.lineage.size <= LINEAGE_CAP) return;
+    const alive = new Set(this.plants.map((p) => p.id));
+    for (const [id, rec] of this.lineage) {
+      if (this.lineage.size <= LINEAGE_CAP * 0.9) break;
+      if (rec.died !== undefined && !alive.has(id)) this.lineage.delete(id);
+    }
+  }
+
   removePlant(id: number): void {
+    const rec = this.lineage.get(id);
+    if (rec && rec.died === undefined) {
+      rec.died = this.tick;
+      rec.fate = 'removed';
+    }
     this.plants = this.plants.filter((p) => p.id !== id);
     this.cache.delete(id);
     for (const b of this.bugs) if (b.targetPlant === id) b.targetPlant = null;
+    this.updateLight();
   }
 
   /** Replace a plant's DNA and regrow it at its current step. May collapse it. */
@@ -269,7 +344,14 @@ export class World {
     if (!plant || plant.stage === 'dying') return [];
     plant.dna = formatDna(parseDna(dna));
     plant.mutated = [];
-    return this.regrow(plant);
+    const rec = this.lineage.get(id);
+    if (rec) {
+      rec.dna = plant.dna;
+      rec.mutated = [];
+    }
+    const events = this.regrow(plant);
+    this.updateLight();
+    return events;
   }
 
   clonePlant(id: number): Plant | null {
@@ -303,12 +385,17 @@ export class World {
     plant.stage = 'dying';
     plant.deathReason = reason;
     plant.dyingTicks = DYING_TICKS;
+    const rec = this.lineage.get(plant.id);
+    if (rec) {
+      rec.died = this.tick;
+      rec.fate = reason;
+    }
     for (const b of this.bugs) if (b.targetPlant === plant.id) b.targetPlant = null;
     if (reason === 'collapsed') {
       this.stats.collapsed++;
       return { type: 'collapse', x: plant.x };
     }
-    if (reason === 'shaded') this.stats.shaded++;
+    if (reason === 'starved') this.stats.starved++;
     else this.stats.old++;
     return { type: 'death', x: plant.x };
   }
@@ -322,6 +409,7 @@ export class World {
     if (this.geometryKey() !== before) {
       this.cache.clear();
       for (const p of this.livePlants()) events.push(...this.regrow(p));
+      this.updateLight();
     }
     this.syncBugs();
     return events;
@@ -334,9 +422,9 @@ export class World {
     const events: WorldEvent[] = [];
     this.tick++;
     this.advanceWeather(events);
-    this.updateShade();
     if (this.weather.kind === 'rain') this.growAll(events);
-    this.ageAll(events);
+    this.updateLight();
+    this.energyAll(events);
     this.syncBugs();
     this.moveBugs(events);
     return events;
@@ -350,29 +438,19 @@ export class World {
     events.push({ type: 'weather', kind: this.weather.kind });
   }
 
-  /** A plant is shaded when a taller neighbour's canopy reaches over its root. */
-  private updateShade(): void {
+  /** Recompute where sunlight falls. Dying plants no longer cast shade. */
+  updateLight(): void {
     const live = this.livePlants();
-    const geos = live.map((p) => this.geometry(p));
-    const margin = this.settings.shadeMargin;
-    live.forEach((p, i) => {
-      p.shaded = false;
-      for (let j = 0; j < live.length; j++) {
-        if (i === j) continue;
-        const q = live[j];
-        const gq = geos[j];
-        if (gq.height <= geos[i].height + 1) continue;
-        if (p.x >= q.x + gq.geo.minX - margin && p.x <= q.x + gq.geo.maxX + margin) {
-          p.shaded = true;
-          break;
-        }
-      }
-    });
+    this.light = computeLight(
+      live.map((p) => ({ id: p.id, x: p.x, geo: this.geometry(p).geo })),
+      this.settings.fieldWidth,
+    );
+    this.lightVersion++;
   }
 
   private growAll(events: WorldEvent[]): void {
     for (const plant of this.livePlants()) {
-      if (plant.shaded || plant.stage === 'mature') continue;
+      if (plant.stage === 'mature') continue;
       if (plant.steps >= this.settings.maxSteps) {
         plant.stage = 'mature';
         continue;
@@ -392,22 +470,44 @@ export class World {
     }
   }
 
-  private ageAll(events: WorldEvent[]): void {
+  /** What a plant pays per tick to stay alive, given its current shape. */
+  upkeepFor(grown: GrownPlant, age: number): number {
+    const s = this.settings;
+    let wood = 0;
+    let green = 0;
+    for (const seg of grown.geo.segs) {
+      if (seg.pen === 'w') wood++;
+      else green++;
+    }
+    const flowers = grown.flowers.y + grown.flowers.p;
+    const oldAge = age > s.lifespan ? OLD_AGE_DRAIN + OLD_AGE_RAMP * (age - s.lifespan) : 0;
+    return s.baseUpkeep + wood * s.woodUpkeep + green * s.greenUpkeep + flowers * s.flowerUpkeep + oldAge;
+  }
+
+  /** Sunlight in, upkeep out; starve at zero. Also ages plants and clears the dead. */
+  private energyAll(events: WorldEvent[]): void {
+    const s = this.settings;
+    const lightFactor = this.weather.kind === 'sun' ? 1 : s.rainLight;
     for (const plant of this.plants) {
       if (plant.stage === 'dying') {
         plant.dyingTicks = (plant.dyingTicks ?? DYING_TICKS) - 1;
         continue;
       }
       plant.age++;
-      if (plant.shaded) plant.health -= SHADE_DAMAGE;
-      if (plant.age > this.settings.lifespan) plant.health -= OLD_AGE_DAMAGE;
-      if (plant.health <= 0) {
-        plant.health = 0;
-        events.push(this.kill(plant, plant.shaded ? 'shaded' : 'old'));
+      const grown = this.geometry(plant);
+      plant.sun = (this.light?.gain.get(plant.id) ?? 0) * s.sunPower * lightFactor;
+      plant.upkeep = this.upkeepFor(grown, plant.age);
+      plant.energy = Math.min(s.energyMax, plant.energy + plant.sun - plant.upkeep);
+      if (plant.energy <= 0) {
+        plant.energy = 0;
+        events.push(this.kill(plant, plant.age > s.lifespan ? 'old' : 'starved'));
       }
     }
     const gone = this.plants.filter((p) => p.stage === 'dying' && (p.dyingTicks ?? 0) <= 0);
-    for (const p of gone) this.removePlant(p.id);
+    for (const p of gone) {
+      this.plants = this.plants.filter((q) => q.id !== p.id);
+      this.cache.delete(p.id);
+    }
   }
 
   // ---------- bugs ----------
@@ -551,11 +651,24 @@ export class World {
     }
   }
 
+  // ---------- population ----------
+
+  /** Living plants grouped by exact DNA, biggest group first. */
+  genotypes(): { dna: string; count: number; plants: Plant[] }[] {
+    const groups = new Map<string, Plant[]>();
+    for (const p of this.livePlants()) {
+      const g = groups.get(p.dna);
+      if (g) g.push(p);
+      else groups.set(p.dna, [p]);
+    }
+    return [...groups.entries()].map(([dna, plants]) => ({ dna, count: plants.length, plants })).sort((a, b) => b.count - a.count);
+  }
+
   // ---------- save / load ----------
 
   toJSON(): SaveFile {
     return {
-      version: 1,
+      version: 2,
       savedAt: new Date().toISOString(),
       tick: this.tick,
       weather: { ...this.weather },
@@ -564,21 +677,38 @@ export class World {
       stats: { ...this.stats },
       plants: this.plants.map((p) => ({ ...p, parents: p.parents.map((r) => ({ ...r })), mutated: [...p.mutated] })),
       bugs: this.bugs.map((b) => ({ ...b, carrying: b.carrying ? { ...b.carrying } : null })),
+      lineage: [...this.lineage.values()].map((r) => ({ ...r, parents: r.parents.map((p) => ({ ...p })), mutated: [...r.mutated] })),
       nextId: this.nextId,
     };
   }
 
-  static fromJSON(data: SaveFile): World {
-    if (!data || data.version !== 1 || !Array.isArray(data.plants)) throw new Error('Not a Grammar Garden save file');
+  static fromJSON(data: SaveFile | SaveFileV1): World {
+    if (!data || !(data.version === 1 || data.version === 2) || !Array.isArray(data.plants)) throw new Error('Not a Grammar Garden save file');
     const w = new World({ ...DEFAULT_SETTINGS, ...data.settings }, 1);
     w.rng.state = data.rngState;
     w.tick = data.tick;
     w.weather = { ...data.weather };
     w.stats = { ...w.stats, ...data.stats };
-    w.plants = data.plants.map((p) => ({ ...p, parents: p.parents ?? [], mutated: p.mutated ?? [], shaded: p.shaded ?? false }));
+    w.plants = data.plants.map((p) => ({
+      ...p,
+      parents: p.parents ?? [],
+      mutated: p.mutated ?? [],
+      energy: p.energy ?? w.settings.startEnergy,
+      sun: p.sun ?? 0,
+      upkeep: p.upkeep ?? 0,
+    }));
     w.bugs = (data.bugs ?? []).map((b) => ({ ...b }));
+    const lineage = data.version === 2 ? data.lineage : [];
+    for (const r of lineage) w.lineage.set(r.id, { ...r, parents: r.parents ?? [], mutated: r.mutated ?? [] });
+    // Older saves have no archive: reconstruct what we can from the living plants.
+    for (const p of w.plants) {
+      if (!w.lineage.has(p.id)) {
+        w.lineage.set(p.id, { id: p.id, name: p.name, dna: p.dna, generation: p.generation, parents: p.parents, mutated: p.mutated, born: w.tick - p.age });
+      }
+    }
     w.nextId = data.nextId;
     w.syncBugs();
+    w.updateLight();
     return w;
   }
 }

@@ -42,7 +42,7 @@
             <div><b id="st-born">0</b><span>babies</span></div>
             <div><b id="st-visits">0</b><span>bug visits</span></div>
             <div><b id="st-collapsed">0</b><span>collapsed</span></div>
-            <div><b id="st-shaded">0</b><span>shaded out</span></div>
+            <div><b id="st-starved">0</b><span>starved</span></div>
             <div><b id="st-old">0</b><span>died of age</span></div>
           </div>
           <div class="muted" id="st-tick"></div>
@@ -51,8 +51,8 @@
         <section class="card" id="inspector">
           <h2 id="insp-title">Seed designer</h2>
           <canvas id="insp-canvas"></canvas>
+          <div class="energy" title="Stored energy"><div id="energy-bar"></div><span id="energy-label"></span></div>
           <div id="insp-info" class="info"></div>
-          <div class="health"><div id="health-bar"></div></div>
           <label class="dna-label" for="dna">Recipe (DNA)</label>
           <textarea id="dna" rows="3" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
           <div id="verdict" class="verdict"></div>
@@ -61,9 +61,16 @@
             <button id="btn-clone">🌱 Clone to seed</button>
             <button id="btn-plant">🌱 Plant new seed</button>
             <button id="btn-surprise">🎲 Surprise me</button>
+            <button id="btn-family">🌳 Family tree</button>
             <button id="btn-remove" class="danger">✕ Remove</button>
           </div>
         </section>
+
+        <details class="card" id="population">
+          <summary><h2>🧬 Who is winning?</h2></summary>
+          <p class="muted">Living plants grouped by recipe. Same recipe, same shape.</p>
+          <div id="population-body"></div>
+        </details>
 
         <details class="card" id="legend">
           <summary><h2>📖 How recipes work</h2></summary>
@@ -80,6 +87,7 @@
             <tr><td><code>p</code></td><td>a pink flower here (butterflies love these)</td></tr>
           </table>
           <p>Plants fall over if their lines cross, if a green stem holds up too much, or if they grow down into the dirt.</p>
+          <p>Green catches sunlight, but only what reaches it: every green bit above it takes half, and wood blocks the light completely. Wood and flowers cost energy every tick. A plant that runs out of energy starves.</p>
           <h3>Try a recipe</h3>
           <div id="starters" class="starters"></div>
         </details>
@@ -103,6 +111,18 @@
           </label>
         </section>
       </aside>
+    </div>
+    <div id="family" class="overlay" hidden>
+      <div class="overlay-box">
+        <header class="overlay-head">
+          <h2 id="family-title">Family</h2>
+          <button id="family-close" class="big" title="Close">✕</button>
+        </header>
+        <div class="overlay-body">
+          <div id="family-tree" class="family-tree"></div>
+          <aside id="family-detail" class="family-detail"></aside>
+        </div>
+      </div>
     </div>
     <script type="module" src="/src/app/main.ts"></script>
   </body>

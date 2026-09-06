@@ -47,10 +47,10 @@ export function cleanSymbols(s: string): string {
   return out + ']'.repeat(depth);
 }
 
-/** Parse `A=fB;B=f[lC]` into rules. Whitespace and unknown characters are ignored. */
+/** Parse `A=fB;B=f[lC]` into rules. Rules may be separated by `;` or newlines; whitespace and unknown characters are ignored. */
 export function parseDna(dna: string): Rules {
   const rules: Rules = {};
-  for (const part of dna.split(';')) {
+  for (const part of dna.split(/[;\r\n]+/)) {
     const eq = part.indexOf('=');
     if (eq < 0) continue;
     const name = part.slice(0, eq).trim();
@@ -60,10 +60,22 @@ export function parseDna(dna: string): Rules {
   return rules;
 }
 
-/** Canonical DNA string: A first, then the other rules alphabetically. */
+function ruleNames(rules: Rules): string[] {
+  return Object.keys(rules).sort((a, b) => (a === 'A' ? -1 : b === 'A' ? 1 : a.localeCompare(b)));
+}
+
+/** Canonical DNA string for storage: A first, then the other rules alphabetically, `;`-separated. */
 export function formatDna(rules: Rules): string {
-  const names = Object.keys(rules).sort((a, b) => (a === 'A' ? -1 : b === 'A' ? 1 : a.localeCompare(b)));
-  return names.map((n) => `${n}=${rules[n]}`).join(';');
+  return ruleNames(rules)
+    .map((n) => `${n}=${rules[n]}`)
+    .join(';');
+}
+
+/** The same rules, one per line, for the editor. */
+export function formatDnaLines(rules: Rules): string {
+  return ruleNames(rules)
+    .map((n) => `${n}=${rules[n]}`)
+    .join('\n');
 }
 
 /** Problems a child can understand; empty means the DNA is usable. */

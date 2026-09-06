@@ -1,9 +1,10 @@
 import { randomDna } from '../core/genetics';
-import { formatDna, parseDna } from '../core/grammar';
+import { formatDna, formatDnaLines, parseDna } from '../core/grammar';
 import { describeVerdict } from '../core/structure';
 import { STARTERS } from '../core/starters';
 import { DEFAULT_SETTINGS, World, type Plant, type SaveFile, type Settings, type WorldEvent } from '../core/world';
 import { Sounds } from './audio';
+import { closeFamilyTree, openFamilyTree } from './family';
 import { drawField, drawInspector, fieldView, hitTest } from './render';
 
 const AUTOSAVE_KEY = 'grammar-garden-autosave';
@@ -35,15 +36,19 @@ const dnaBox = $<HTMLTextAreaElement>('dna');
 const verdictEl = $('verdict');
 const infoEl = $('insp-info');
 const titleEl = $('insp-title');
-const healthBar = $('health-bar');
+const energyBar = $('energy-bar');
+const energyLabel = $('energy-label');
 const toastEl = $('toast');
 const weatherBadge = $('weather-badge');
 const btnPlay = $<HTMLButtonElement>('btn-play');
 const btnApply = $<HTMLButtonElement>('btn-apply');
 const btnClone = $<HTMLButtonElement>('btn-clone');
 const btnRemove = $<HTMLButtonElement>('btn-remove');
+const btnFamily = $<HTMLButtonElement>('btn-family');
 const speedInput = $<HTMLInputElement>('speed');
 const speedOut = $<HTMLOutputElement>('speed-out');
+const populationEl = $<HTMLDetailsElement>('population');
+const populationBody = $('population-body');
 
 // ---------- helpers ----------
 
@@ -85,6 +90,18 @@ function handleEvents(events: WorldEvent[]): void {
   }
 }
 
+/** Put a recipe into the editor, one rule per line, and size the box to fit. */
+function setEditor(dna: string): void {
+  const rules = parseDna(dna);
+  dnaBox.value = Object.keys(rules).length ? formatDnaLines(rules) : dna;
+  fitEditor();
+}
+
+function fitEditor(): void {
+  const lines = dnaBox.value.split('\n').length;
+  dnaBox.rows = Math.min(10, Math.max(3, lines + 1));
+}
+
 // ---------- autosave ----------
 
 function loadAutosave(): World | null {
@@ -116,6 +133,7 @@ function doTick(): void {
   if (world.tick % AUTOSAVE_EVERY === 0) autosave();
   refreshStats();
   refreshInspector();
+  refreshPopulation();
 }
 
 function frame(now: number): void {
@@ -152,9 +170,9 @@ function refreshStats(): void {
   $('st-born').textContent = String(world.stats.born);
   $('st-visits').textContent = String(world.stats.visits);
   $('st-collapsed').textContent = String(world.stats.collapsed);
-  $('st-shaded').textContent = String(world.stats.shaded);
+  $('st-starved').textContent = String(world.stats.starved);
   $('st-old').textContent = String(world.stats.old);
-  $('st-tick').textContent = `Tick ${world.tick} · ${live.length}/${world.settings.maxPlants} spots used`;
+  $('st-tick').textContent = `Tick ${world.tick} · ${live.length}/${world.settings.maxPlants} spots used · ${world.genotypes().length} different recipes`;
   const w = world.weather;
   weatherBadge.textContent = w.kind === 'rain' ? `🌧 Raining, ${w.ticksLeft} to go` : `☀️ Sunny, ${w.ticksLeft} to go`;
 }
@@ -170,7 +188,8 @@ function refreshInspector(): void {
   btnApply.disabled = !plant;
   btnClone.disabled = !plant;
   btnRemove.disabled = !plant;
-  if (!editorDirty) dnaBox.value = plant ? plant.dna : dnaBox.value;
+  btnFamily.disabled = !plant;
+  if (!editorDirty && plant) setEditor(plant.dna);
 
   const dna = dnaBox.value;
   const grown = world.preview(dna, previewSteps(plant));
@@ -185,28 +204,36 @@ function refreshInspector(): void {
     verdictEl.className = 'verdict ' + (grown.verdict.ok ? 'ok' : 'bad');
   }
 
+  const upkeep = world.upkeepFor(grown, 0);
   if (!plant) {
     titleEl.textContent = 'Seed designer';
-    healthBar.style.width = '0%';
+    energyBar.style.width = '0%';
+    energyLabel.textContent = '';
     infoEl.innerHTML = `<dt>Recipe size</dt><dd>${grown.str.length} symbols after ${grown.steps} steps</dd>
       <dt>Flowers</dt><dd>🟡 ${grown.flowers.y} · 🩷 ${grown.flowers.p}</dd>
+      <dt>Upkeep</dt><dd>${upkeep.toFixed(1)} energy per tick when fully grown</dd>
       <dt>Tip</dt><dd>Click a plant in the garden to see its recipe, or write one here and plant it.</dd>`;
     return;
   }
 
   const stageWords: Record<string, string> = {
     seed: 'a seed, waiting for rain',
-    growing: plant.shaded ? 'growing, but shaded by a neighbour' : 'growing',
-    mature: plant.shaded ? 'fully grown, shaded by a neighbour' : 'fully grown',
-    dying: plant.deathReason === 'collapsed' ? 'collapsed!' : plant.deathReason === 'shaded' ? 'faded away in the shade' : 'died of old age',
+    growing: 'growing',
+    mature: 'fully grown',
+    dying: plant.deathReason === 'collapsed' ? 'collapsed!' : plant.deathReason === 'starved' ? 'starved' : 'died of old age',
   };
   titleEl.textContent = `${plant.name} · generation ${plant.generation}`;
-  healthBar.style.width = `${plant.health}%`;
+  const pct = Math.round((100 * plant.energy) / world.settings.energyMax);
+  energyBar.style.width = `${pct}%`;
+  const net = plant.sun - plant.upkeep;
+  energyLabel.textContent = `energy ${Math.round(plant.energy)} · ${net >= 0 ? '+' : ''}${net.toFixed(1)} per tick`;
   const parents = plant.parents.length
     ? plant.parents.map((r) => `<button class="link" data-select="${r.id}">${r.name}</button>`).join(' + ')
     : 'none, a starter seed';
   const mutated = plant.mutated.length ? `<dt>Mutated</dt><dd class="mut">✨ rule${plant.mutated.length > 1 ? 's' : ''} ${plant.mutated.join(', ')}</dd>` : '';
+  const sunWord = plant.stage === 'seed' ? 'none yet, seeds have no green' : `+${plant.sun.toFixed(1)} sunlight, −${plant.upkeep.toFixed(1)} upkeep`;
   infoEl.innerHTML = `<dt>Status</dt><dd>${stageWords[plant.stage]}</dd>
+    <dt>Energy</dt><dd>${sunWord}</dd>
     <dt>Age</dt><dd>${plant.age} of ${world.settings.lifespan} ticks</dd>
     <dt>Grown</dt><dd>${plant.steps} steps, ${grown.str.length} symbols</dd>
     <dt>Flowers</dt><dd>🟡 ${grown.flowers.y} · 🩷 ${grown.flowers.p}</dd>
@@ -225,11 +252,12 @@ infoEl.addEventListener('click', (e) => {
   if (!btn) return;
   const id = Number(btn.dataset.select);
   if (world.plantById(id)) select(id);
-  else toast('That parent is gone now');
+  else toast('That parent is gone now. Try the family tree.');
 });
 
 dnaBox.addEventListener('input', () => {
   editorDirty = true;
+  fitEditor();
   refreshInspector();
 });
 
@@ -263,7 +291,7 @@ $('btn-plant').addEventListener('click', () => {
 });
 
 $('btn-surprise').addEventListener('click', () => {
-  dnaBox.value = formatDna(randomDna(world.rng));
+  setEditor(formatDna(randomDna(world.rng)));
   editorDirty = true;
   refreshInspector();
 });
@@ -274,6 +302,70 @@ btnRemove.addEventListener('click', () => {
   world.removePlant(plant.id);
   select(null);
   refreshStats();
+});
+
+// ---------- family tree ----------
+
+btnFamily.addEventListener('click', () => {
+  const plant = selectedPlant();
+  if (!plant) return;
+  setPaused(true);
+  openFamilyTree(world, plant.id, {
+    select: (id) => select(id),
+    useRecipe: (dna) => {
+      select(null);
+      setEditor(dna);
+      editorDirty = true;
+      refreshInspector();
+      toast('Recipe loaded into the seed designer');
+    },
+  });
+});
+$('family-close').addEventListener('click', closeFamilyTree);
+$('family').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) closeFamilyTree();
+});
+
+// ---------- population ----------
+
+let populationKey = '';
+function refreshPopulation(): void {
+  if (!populationEl.open) return;
+  const groups = world.genotypes().slice(0, 8);
+  const total = world.livePlants().length || 1;
+  const key = groups.map((g) => `${g.dna}:${g.count}`).join('|');
+  if (key === populationKey) return;
+  populationKey = key;
+  populationBody.innerHTML = '';
+  if (!groups.length) {
+    populationBody.innerHTML = '<p class="muted">Nobody is alive right now.</p>';
+    return;
+  }
+  for (const g of groups) {
+    const row = document.createElement('div');
+    row.className = 'geno';
+    const canvas = document.createElement('canvas');
+    const mid = document.createElement('div');
+    const pct = Math.round((100 * g.count) / total);
+    mid.innerHTML = `<div><span class="count">${g.count}</span> <span class="muted">${pct}% · like ${g.plants[0].name}</span></div>
+      <div class="bar"><div style="width:${pct}%"></div></div>
+      <div class="dna" title="${g.dna}">${g.dna}</div>`;
+    const btn = document.createElement('button');
+    btn.textContent = '👀';
+    btn.title = 'Show one of these';
+    let i = 0;
+    btn.addEventListener('click', () => {
+      const p = g.plants[i++ % g.plants.length];
+      if (world.plantById(p.id)) select(p.id);
+    });
+    row.append(canvas, mid, btn);
+    populationBody.append(row);
+    drawInspector(canvas, world.preview(g.dna, world.settings.maxSteps), []);
+  }
+}
+populationEl.addEventListener('toggle', () => {
+  populationKey = '';
+  refreshPopulation();
 });
 
 // ---------- field interaction ----------
@@ -306,22 +398,30 @@ $('btn-rain').addEventListener('click', () => {
 });
 
 document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeFamilyTree();
   if (e.code === 'Space' && !(e.target instanceof HTMLTextAreaElement) && !(e.target instanceof HTMLInputElement)) {
     e.preventDefault();
     setPaused(!paused);
   }
 });
 
-/** Speed slider: 1 = slow (3 s per tick), 10 = fast (0.1 s per tick). */
+/** Speed slider: left is slow, right is fast; shown as ticks per second. */
 const SPEED_MS = [3000, 2000, 1500, 1200, 1000, 700, 500, 300, 200, 100];
+function speedLabel(ms: number): string {
+  const tps = 1000 / ms;
+  return `${tps >= 1 ? tps.toFixed(tps >= 5 ? 0 : 1) : tps.toFixed(2)} ticks/s`;
+}
 function applySpeed(): void {
   const ms = SPEED_MS[Number(speedInput.value) - 1];
   world.updateSettings({ tickMs: ms });
-  speedOut.value = `${(ms / 1000).toFixed(1)}s`;
+  speedOut.value = speedLabel(ms);
+}
+function syncSpeedUi(): void {
+  const i = SPEED_MS.indexOf(world.settings.tickMs);
+  speedInput.value = String(i >= 0 ? i + 1 : 5);
+  speedOut.value = speedLabel(world.settings.tickMs);
 }
 speedInput.addEventListener('input', applySpeed);
-speedInput.value = String(SPEED_MS.indexOf(world.settings.tickMs) + 1 || 5);
-speedOut.value = `${(world.settings.tickMs / 1000).toFixed(1)}s`;
 
 // ---------- settings ----------
 
@@ -334,22 +434,28 @@ interface Spec {
   format?: (v: number) => string;
 }
 
+const pctFmt = (v: number) => `${Math.round(v * 100)}%`;
 const SPECS: Spec[] = [
   { key: 'sunTicks', label: 'Sunny spell', min: 2, max: 60, step: 1, format: (v) => `${v} ticks` },
   { key: 'rainTicks', label: 'Rain spell', min: 1, max: 40, step: 1, format: (v) => `${v} ticks` },
-  { key: 'lifespan', label: 'Plant lifespan', min: 10, max: 600, step: 10, format: (v) => `${v} ticks` },
+  { key: 'lifespan', label: 'Plant lifespan', min: 20, max: 2000, step: 20, format: (v) => `${v} ticks` },
   { key: 'bees', label: 'Bees', min: 0, max: 8, step: 1 },
   { key: 'butterflies', label: 'Butterflies', min: 0, max: 8, step: 1 },
-  { key: 'maxPlants', label: 'Room for plants', min: 5, max: 60, step: 1 },
-  { key: 'seedSpacing', label: 'Seed spacing', min: 10, max: 120, step: 5, format: (v) => `${v} px` },
+  { key: 'maxPlants', label: 'Room for plants', min: 5, max: 80, step: 1 },
+  { key: 'seedSpacing', label: 'Seed spacing', min: 2, max: 120, step: 2, format: (v) => `${v} px` },
   { key: 'maxSteps', label: 'Growth steps', min: 1, max: 30, step: 1 },
   { key: 'maxSymbols', label: 'Recipe size limit', min: 20, max: 1000, step: 10 },
   { key: 'turnAngle', label: 'Turn angle', min: 5, max: 90, step: 5, format: (v) => `${v}°` },
   { key: 'stepPx', label: 'Step size', min: 2, max: 30, step: 1, format: (v) => `${v} px` },
   { key: 'maxLoad', label: 'Green stem strength', min: 1, max: 60, step: 1, format: (v) => `${v} steps` },
-  { key: 'mutationRate', label: 'Mutation chance', min: 0, max: 1, step: 0.05, format: (v) => `${Math.round(v * 100)}%` },
-  { key: 'shadeMargin', label: 'Shade reach', min: 0, max: 60, step: 2, format: (v) => `${v} px` },
-  { key: 'visitChance', label: 'Bug curiosity', min: 0, max: 1, step: 0.05, format: (v) => `${Math.round(v * 100)}%` },
+  { key: 'sunPower', label: 'Sun strength', min: 0.1, max: 2, step: 0.05, format: (v) => v.toFixed(2) },
+  { key: 'rainLight', label: 'Light in rain', min: 0, max: 1, step: 0.05, format: pctFmt },
+  { key: 'baseUpkeep', label: 'Cost of living', min: 0, max: 3, step: 0.1, format: (v) => v.toFixed(1) },
+  { key: 'flowerUpkeep', label: 'Cost per flower', min: 0, max: 2, step: 0.05, format: (v) => v.toFixed(2) },
+  { key: 'woodUpkeep', label: 'Cost per wood bit', min: 0, max: 0.5, step: 0.01, format: (v) => v.toFixed(2) },
+  { key: 'startEnergy', label: 'Seed energy', min: 5, max: 100, step: 5 },
+  { key: 'mutationRate', label: 'Mutation chance', min: 0, max: 1, step: 0.05, format: pctFmt },
+  { key: 'visitChance', label: 'Bug curiosity', min: 0, max: 1, step: 0.05, format: pctFmt },
 ];
 
 const settingInputs = new Map<keyof Settings, HTMLInputElement>();
@@ -394,8 +500,7 @@ function syncSettingsUi(): void {
     input.dispatchEvent(new Event('input'));
   }
   $<HTMLInputElement>('selfing').checked = world.settings.allowSelfing;
-  speedInput.value = String(SPEED_MS.indexOf(world.settings.tickMs) + 1 || 5);
-  speedOut.value = `${(world.settings.tickMs / 1000).toFixed(1)}s`;
+  syncSpeedUi();
 }
 
 // ---------- legend ----------
@@ -407,7 +512,8 @@ function buildStarters(): void {
     b.textContent = s.name;
     b.title = `${s.dna} — ${s.blurb}`;
     b.addEventListener('click', () => {
-      dnaBox.value = s.dna;
+      select(null);
+      setEditor(s.dna);
       editorDirty = true;
       refreshInspector();
       toast(`${s.name}: ${s.blurb}`);
@@ -423,10 +529,12 @@ function replaceWorld(next: World): void {
   selectedId = null;
   editorDirty = false;
   acc = 0;
+  populationKey = '';
   sounds.setRain(world.weather.kind === 'rain');
   syncSettingsUi();
   refreshStats();
   refreshInspector();
+  refreshPopulation();
   autosave();
 }
 
@@ -487,13 +595,15 @@ document.addEventListener('keydown', unlock, { capture: true });
 
 buildSettings();
 buildStarters();
+syncSpeedUi();
 if (!world.plants.length) world = World.newGarden();
-dnaBox.value = STARTERS[3].dna;
+setEditor(STARTERS[3].dna);
 refreshStats();
 window.addEventListener('resize', refreshInspector);
 // First draw after layout has settled, so canvases measure their real size.
 requestAnimationFrame((now) => {
   last = now;
   refreshInspector();
+  refreshPopulation();
   frame(now);
 });

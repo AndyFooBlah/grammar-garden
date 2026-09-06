@@ -63,6 +63,7 @@ export function drawField(ctx: CanvasRenderingContext2D, world: World, view: Vie
   // Ground
   ctx.fillStyle = COLORS.dirt;
   ctx.fillRect(0, groundY, width, height - groundY);
+  drawShade(ctx, world, view);
   ctx.strokeStyle = COLORS.dirtDark;
   ctx.lineWidth = 2;
   ctx.beginPath();
@@ -84,8 +85,9 @@ export function drawField(ctx: CanvasRenderingContext2D, world: World, view: Vie
         const dir = plant.id % 2 === 0 ? 1 : -1;
         ctx.rotate(dir * progress * progress * 1.4);
       }
-    } else if (plant.shaded) {
-      ctx.globalAlpha = 0.55;
+    } else if (plant.energy < LOW_ENERGY) {
+      // Starving plants fade so a child can see who is in trouble.
+      ctx.globalAlpha = 0.45 + 0.55 * (plant.energy / LOW_ENERGY);
     }
     if (plant.id === frame.selectedId) {
       ctx.strokeStyle = COLORS.halo;
@@ -103,6 +105,55 @@ export function drawField(ctx: CanvasRenderingContext2D, world: World, view: Vie
   }
 
   for (const bug of world.bugs) drawBug(ctx, bug, view, frame);
+}
+
+const LOW_ENERGY = 25;
+const SKY_SHADE = 0.22;
+const GROUND_SHADE = 0.32;
+
+let shadeCache: { key: string; canvas: HTMLCanvasElement } | null = null;
+
+/**
+ * Darken the sky and dirt wherever sunlight has been caught above. Rebuilt only
+ * when the light map or the canvas size changes, then stamped each frame.
+ */
+function drawShade(ctx: CanvasRenderingContext2D, world: World, view: View): void {
+  const lm = world.light;
+  if (!lm) return;
+  const { width, height, scale, groundY } = view;
+  const key = `${world.lightVersion}|${width}|${height}`;
+  if (!shadeCache || shadeCache.key !== key) {
+    const dpr = window.devicePixelRatio || 1;
+    const canvas = shadeCache?.canvas ?? document.createElement('canvas');
+    canvas.width = Math.round(width * dpr);
+    canvas.height = Math.round(height * dpr);
+    const c = canvas.getContext('2d')!;
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    c.clearRect(0, 0, width, height);
+    const colW = lm.col * scale;
+    for (let i = 0; i < lm.columns.length; i++) {
+      const col = lm.columns[i];
+      if (!col.ys.length) continue;
+      const x = i * colW;
+      for (let k = 0; k < col.ys.length; k++) {
+        const light = col.lights[k];
+        if (light >= 1) continue;
+        const y0 = groundY + col.ys[k] * scale;
+        const y1 = k + 1 < col.ys.length ? groundY + col.ys[k + 1] * scale : groundY;
+        if (y1 <= y0) continue;
+        c.fillStyle = `rgba(25, 35, 60, ${((1 - light) * SKY_SHADE).toFixed(3)})`;
+        c.fillRect(x, y0, colW + 0.6, y1 - y0);
+        if (light <= 0) break;
+      }
+      const ground = lm.ground[i];
+      if (ground < 1) {
+        c.fillStyle = `rgba(60, 35, 10, ${((1 - ground) * GROUND_SHADE).toFixed(3)})`;
+        c.fillRect(x, groundY, colW + 0.6, height - groundY);
+      }
+    }
+    shadeCache = { key, canvas };
+  }
+  ctx.drawImage(shadeCache.canvas, 0, 0, width, height);
 }
 
 function failSegs(grown: GrownPlant): number[] {

@@ -199,7 +199,7 @@ button:disabled {
 
 .slider {
   display: grid;
-  grid-template-columns: 9.5em 1fr 3.6em;
+  grid-template-columns: 9.5em 1fr 4.6em;
   align-items: center;
   gap: 8px;
   font-size: 0.9rem;
@@ -288,19 +288,31 @@ input[type='range'] {
   text-decoration: underline;
 }
 
-.health {
-  height: 8px;
+.energy {
+  position: relative;
+  height: 16px;
   background: #fff;
   border-radius: 999px;
   overflow: hidden;
   margin: 6px 0;
+  font-size: 0.72rem;
+  font-weight: 700;
 }
 
-#health-bar {
+#energy-bar {
   height: 100%;
-  width: 100%;
-  background: var(--accent-2);
+  width: 0;
+  background: linear-gradient(90deg, var(--sun), var(--accent-2));
   transition: width 0.3s;
+}
+
+#energy-label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink);
 }
 
 .dna-label {
@@ -396,5 +408,196 @@ code {
   #panel {
     border-left: 0;
     border-top: 2px solid var(--line);
+  }
+}
+
+/* population */
+.geno {
+  display: grid;
+  grid-template-columns: 52px 1fr auto;
+  gap: 8px;
+  align-items: center;
+  padding: 4px 0;
+  border-top: 1px solid var(--line);
+}
+
+.geno canvas {
+  width: 52px;
+  height: 52px;
+  border-radius: 6px;
+  display: block;
+}
+
+.geno .bar {
+  height: 8px;
+  background: #fff;
+  border-radius: 999px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.geno .bar div {
+  height: 100%;
+  background: var(--accent-2);
+}
+
+.geno .count {
+  font-family: 'Baloo 2', sans-serif;
+  font-size: 1.1rem;
+}
+
+.geno .dna {
+  font-size: 0.7rem;
+  color: var(--ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* family tree overlay */
+.overlay[hidden] {
+  display: none;
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(34, 48, 31, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 10;
+}
+
+.overlay-box {
+  background: var(--paper);
+  border-radius: 16px;
+  width: min(1200px, 100%);
+  height: min(820px, 100%);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+}
+
+.overlay-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 16px;
+  border-bottom: 2px solid var(--line);
+}
+
+.overlay-head h2 {
+  font-size: 1.4rem;
+  color: var(--accent);
+}
+
+.overlay-body {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  min-height: 0;
+  flex: 1;
+}
+
+.family-tree {
+  position: relative;
+  overflow: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.family-lines {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+
+.family-row {
+  display: grid;
+  gap: 6px;
+}
+
+.family-cell {
+  display: flex;
+  justify-content: center;
+}
+
+.family-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px;
+  width: 96px;
+  background: var(--paper-2);
+  box-shadow: none;
+  border: 2px solid transparent;
+}
+
+.family-node.me {
+  border-color: var(--accent);
+}
+
+.family-node.dead {
+  opacity: 0.7;
+}
+
+.family-canvas {
+  width: 80px;
+  height: 80px;
+  border-radius: 6px;
+}
+
+.family-name {
+  font-family: 'Baloo 2', sans-serif;
+  font-size: 0.95rem;
+}
+
+.family-gen {
+  font-size: 0.72rem;
+  color: var(--ink-2);
+  font-weight: 600;
+}
+
+.family-detail {
+  border-left: 2px solid var(--line);
+  padding: 12px 16px;
+  overflow: auto;
+}
+
+.family-detail h3 {
+  margin: 0 0 4px;
+  font-size: 1.2rem;
+}
+
+.family-detail pre.dna {
+  background: var(--mono-bg);
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.family-detail .mut {
+  color: var(--accent);
+  font-weight: 700;
+  margin: 6px 0;
+}
+
+@media (max-width: 860px) {
+  .overlay-body {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr auto;
+  }
+  .family-detail {
+    border-left: 0;
+    border-top: 2px solid var(--line);
+    max-height: 40%;
   }
 }

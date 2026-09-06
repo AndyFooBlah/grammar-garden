@@ -27,10 +27,11 @@ describe('World', () => {
   });
 
   it('collapses Tangle and Floppy, keeps Bramble', () => {
-    const w = World.newGarden({ sunTicks: 1, rainTicks: 30 }, 3);
+    const w = World.newGarden({ sunTicks: 1, rainTicks: 30, startEnergy: 1000, energyMax: 1000 }, 3);
     const events = run(w, 32);
     expect(events.some((e) => e.type === 'collapse')).toBe(true);
     const names = (dna: string) => w.plants.find((p) => p.dna === dna);
+    expect(w.lineage.get(w.plants[0].id)).toBeDefined();
     expect(names(STARTERS.find((s) => s.name === 'Tangle')!.dna)).toBeUndefined();
     expect(names(STARTERS.find((s) => s.name === 'Floppy')!.dna)).toBeUndefined();
     const bramble = names(STARTERS.find((s) => s.name === 'Bramble')!.dna);
@@ -48,14 +49,42 @@ describe('World', () => {
     expect(child!.generation).toBeGreaterThanOrEqual(1);
   });
 
-  it('kills shaded seeds and old plants', () => {
-    const w = World.newGarden({ lifespan: 10, sunTicks: 2, rainTicks: 2 }, 5);
-    // Force a seed right under the Tower.
-    const tower = w.plants.find((p) => p.dna === 'A=wfA')!;
-    w.addSeed('A=fy', { x: tower.x + 1 });
-    const events = run(w, 60);
+  it('starves a seed that never grows anything green', () => {
+    const w = new World({}, 5);
+    const seed = w.addSeed('A=A')!;
+    const events = run(w, 120);
     expect(events.some((e) => e.type === 'death')).toBe(true);
-    expect(w.stats.shaded + w.stats.old).toBeGreaterThan(0);
+    expect(w.plantById(seed.id)).toBeUndefined();
+    expect(w.stats.starved).toBe(1);
+  });
+
+  it('starves a small plant in the shade of a big one, and feeds it in the open', () => {
+    const settings = { sunTicks: 20, rainTicks: 4, lifespan: 10000 };
+    const shaded = new World(settings, 5);
+    shaded.addSeed('A=wfwfwfwfwf[llllllB][rrrrrrB]A;B=g+f', { x: 300 }); // a wooden umbrella, no flowers
+    const under = shaded.addSeed('A=fB;B=fC;C=y', { x: 305 })!;
+    run(shaded, 400);
+    expect(shaded.plantById(under.id)).toBeUndefined();
+
+    const open = new World(settings, 5);
+    const alone = open.addSeed('A=fB;B=fC;C=y', { x: 305 })!;
+    run(open, 400);
+    expect(open.plantById(alone.id)?.energy).toBeGreaterThan(0);
+  });
+
+  it('kills plants of old age once past the lifespan', () => {
+    const w = new World({ lifespan: 30 }, 5);
+    w.addSeed('A=wf[lllB][llB][lB]B[rB][rrB][rrrB];B=gf[lgf][rgf]p');
+    run(w, 120);
+    expect(w.stats.old).toBe(1);
+  });
+
+  it('keeps a lineage archive for the family tree', () => {
+    const w = World.newGarden({ sunTicks: 20, rainTicks: 10, maxPlants: 40 }, 4);
+    run(w, 400);
+    const child = w.plants.find((p) => p.parents.length === 2)!;
+    for (const parent of child.parents) expect(w.lineage.get(parent.id)?.name).toBe(parent.name);
+    expect(w.genotypes()[0].count).toBeGreaterThan(0);
   });
 
   it('round-trips through JSON and replays identically', () => {

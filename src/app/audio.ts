@@ -59,20 +59,23 @@ export class Sounds {
     gain.gain.exponentialRampToValueAtTime(0.0001, t0 + attack + release);
   }
 
-  /** A short sine blip sliding down in pitch. */
+  /** A soft water-drop: a quiet sine sliding down, low-passed so it has no click. */
   plip(pitch = 1): void {
     if (!this.ready) return;
     const ctx = this.ctx!;
     const t = ctx.currentTime;
     const osc = ctx.createOscillator();
+    const filter = ctx.createBiquadFilter();
     const gain = ctx.createGain();
     osc.type = 'sine';
-    osc.frequency.setValueAtTime(900 * pitch, t);
-    osc.frequency.exponentialRampToValueAtTime(350 * pitch, t + 0.12);
-    this.env(gain, t, 0.25, 0.005, 0.14);
-    osc.connect(gain).connect(this.master!);
+    osc.frequency.setValueAtTime(520 * pitch, t);
+    osc.frequency.exponentialRampToValueAtTime(260 * pitch, t + 0.16);
+    filter.type = 'lowpass';
+    filter.frequency.value = 900;
+    this.env(gain, t, 0.09, 0.02, 0.2);
+    osc.connect(filter).connect(gain).connect(this.master!);
     osc.start(t);
-    osc.stop(t + 0.2);
+    osc.stop(t + 0.28);
   }
 
   /** Low buzzy hum for a bee landing. */
