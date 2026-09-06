@@ -142,7 +142,7 @@ Buttons: **Play/Pause**, **Step one tick**, **Make it rain now**, and a speed sl
 - Each bug wanders. On each sunny tick it may pick a target: a random flower of its color, weighted by how many flowers each plant has (more flowers, more visits — a selection pressure a kid can see).
 - When a bug arrives at a flower:
   - If it is **carrying nothing**, it picks up that plant's DNA (a little glow on the bug shows it is carrying).
-  - If it is **carrying DNA from a different plant**, the two DNAs are combined and a **new seed** is dropped at a random free spot on the field. The bug's pollen is then used up. Sound: a buzz for bees, a soft flutter for butterflies, then a "plip" for the seed.
+  - If it is **carrying DNA from a different plant**, the two DNAs are combined and a **new seed** is dropped near the plant being visited: the offset follows a heavy-tailed spread (Cauchy, scale = the **seed travel** setting, 50 px by default), so half of all seeds land within 50 px, most within a few hundred, and a few percent fly far across the field. Clones sprout beside their original the same way. If no free spot turns up after 40 tries, the seed is lost. The bug's pollen is then used up. Sound: a buzz for bees, a soft flutter for butterflies, then a "plip" for the seed.
   - Visiting the plant it already carries pollen from does nothing (self-pollination is off by default; there is a setting to allow it).
 - A plant with both yellow and pink flowers can cross with plants of either flower color. That is an interesting strategy that evolution may or may not discover.
 

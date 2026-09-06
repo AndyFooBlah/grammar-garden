@@ -607,6 +607,7 @@ const SPECS: Spec[] = [
   { key: 'butterflies', label: 'Butterflies', min: 0, max: 8, step: 1 },
   { key: 'maxPlants', label: 'Room for plants', min: 5, max: 300, step: 5 },
   { key: 'seedSpacing', label: 'Seed spacing', min: 2, max: 120, step: 2, format: (v) => `${v} px` },
+  { key: 'seedSpread', label: 'Seed travel', min: 5, max: 600, step: 5, format: (v) => `${v} px` },
   { key: 'maxSteps', label: 'Growth steps', min: 1, max: 30, step: 1 },
   { key: 'maxSymbols', label: 'Recipe size limit', min: 20, max: 1000, step: 10 },
   { key: 'turnAngle', label: 'Turn angle', min: 5, max: 90, step: 5, format: (v) => `${v}°` },

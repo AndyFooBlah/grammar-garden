@@ -139,6 +139,19 @@ describe('World', () => {
     expect(w.genotypes()[0].count).toBeGreaterThan(0);
   });
 
+  it('drops new seeds near the parent, with a long tail', () => {
+    const w = new World({ seedSpacing: 1, maxPlants: 100000, seedSpread: 50 }, 11);
+    const dists: number[] = [];
+    for (let i = 0; i < 2000; i++) {
+      const x = w.findFreeX(1800);
+      expect(x).not.toBeNull();
+      dists.push(Math.abs(x! - 1800));
+    }
+    dists.sort((a, b) => a - b);
+    expect(dists[Math.floor(dists.length / 2)]).toBeLessThan(80); // most land close
+    expect(dists[Math.floor(dists.length * 0.95)]).toBeGreaterThan(200); // some travel far
+  });
+
   it('round-trips through JSON and replays identically', () => {
     const w = World.newGarden({}, 6);
     run(w, 25);

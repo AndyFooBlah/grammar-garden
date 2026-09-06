@@ -29,6 +29,8 @@ export interface Settings {
   butterflies: number;
   maxPlants: number;
   seedSpacing: number;
+  /** How far a new seed usually lands from its second parent (px). Half land within this; a few fly far. */
+  seedSpread: number;
   maxSteps: number;
   maxSymbols: number;
   turnAngle: number;
@@ -67,6 +69,7 @@ export const DEFAULT_SETTINGS: Settings = {
   butterflies: 4,
   maxPlants: 120,
   seedSpacing: 6,
+  seedSpread: 50,
   maxSteps: 12,
   maxSymbols: 200,
   turnAngle: 15,
@@ -355,12 +358,20 @@ export class World {
 
   // ---------- seeds ----------
 
-  /** A free spot on the ground, or null when the field is full. */
-  findFreeX(): number | null {
+  /**
+   * A free spot on the ground, or null when the field is full. With `near`, spots
+   * are drawn from a heavy-tailed (Cauchy) spread around it: most land close,
+   * some a long way off.
+   */
+  findFreeX(near?: number): number | null {
     const s = this.settings;
     if (this.livePlants().length >= s.maxPlants) return null;
-    for (let attempt = 0; attempt < 30; attempt++) {
-      const x = this.rng.range(EDGE_MARGIN, s.fieldWidth - EDGE_MARGIN);
+    const lo = EDGE_MARGIN;
+    const hi = s.fieldWidth - EDGE_MARGIN;
+    for (let attempt = 0; attempt < 40; attempt++) {
+      let x: number;
+      if (near === undefined) x = this.rng.range(lo, hi);
+      else x = Math.min(hi, Math.max(lo, near + s.seedSpread * Math.tan(Math.PI * (this.rng.next() - 0.5))));
       if (this.plants.every((p) => Math.abs(p.x - x) >= s.seedSpacing)) return x;
     }
     return null;
@@ -368,9 +379,9 @@ export class World {
 
   addSeed(
     dna: string,
-    opts: { x?: number; parents?: ParentRef[]; generation?: number; mutated?: string[]; silent?: boolean } = {},
+    opts: { x?: number; near?: number; parents?: ParentRef[]; generation?: number; mutated?: string[]; silent?: boolean } = {},
   ): Plant | null {
-    const x = opts.x ?? this.findFreeX();
+    const x = opts.x ?? this.findFreeX(opts.near);
     if (x === null) return null;
     const plant: Plant = {
       id: this.nextId++,
@@ -444,7 +455,7 @@ export class World {
   clonePlant(id: number): Plant | null {
     const plant = this.plantById(id);
     if (!plant) return null;
-    return this.addSeed(plant.dna, { parents: [{ id: plant.id, name: plant.name }], generation: plant.generation });
+    return this.addSeed(plant.dna, { near: plant.x, parents: [{ id: plant.id, name: plant.name }], generation: plant.generation });
   }
 
   /** Recompute a plant at its current step count and apply the structure verdict. */
@@ -754,6 +765,7 @@ export class World {
     const { rules, mutated } = mutate(childRules, this.settings.mutationRate, this.rng);
     bug.carrying = null;
     const child = this.addSeed(formatDna(rules), {
+      near: plant.x,
       parents: [
         { id: mother.plantId, name: mother.name },
         { id: plant.id, name: plant.name },
