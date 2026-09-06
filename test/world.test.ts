@@ -11,7 +11,8 @@ const run = (w: World, ticks: number): WorldEvent[] => {
 describe('World', () => {
   it('starts with the starters plus random seeds, all as seeds', () => {
     const w = World.newGarden({}, 1);
-    expect(w.plants.length).toBe(STARTERS.length + 3);
+    expect(w.plants.length).toBe(Math.round(w.settings.fieldWidth / 120));
+    for (const st of STARTERS) expect(w.plants.some((p) => p.dna === st.dna)).toBe(true);
     expect(w.plants.every((p) => p.stage === 'seed')).toBe(true);
     expect(w.bugs.length).toBe(w.settings.bees + w.settings.butterflies);
   });

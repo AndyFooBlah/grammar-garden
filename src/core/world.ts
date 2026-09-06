@@ -303,11 +303,14 @@ export class World {
     return Math.min(1, this.settings.waterScale * (green + 2 * flowers + 0.2 * wood));
   }
 
-  /** A fresh garden with the starter recipes and a few random ones. */
+  /** A fresh garden: about one seed per 120 px, two thirds starter recipes (repeated) and one third random. */
   static newGarden(settings: Partial<Settings> = {}, seed?: number): World {
     const w = new World(settings, seed);
-    const recipes = STARTERS.map((s) => s.dna);
-    for (let i = 0; i < 3; i++) recipes.push(formatDna(randomDna(w.rng)));
+    const count = Math.max(STARTERS.length + 3, Math.round(w.settings.fieldWidth / 120));
+    const recipes: string[] = [];
+    for (let i = 0; i < count; i++) {
+      recipes.push(i % 3 === 2 ? formatDna(randomDna(w.rng)) : STARTERS[Math.floor(i / 3) % STARTERS.length].dna);
+    }
     // Spread seeds evenly with a little jitter, in shuffled order.
     const order = recipes.map((_, i) => i).sort(() => w.rng.next() - 0.5);
     const usable = w.settings.fieldWidth - 2 * EDGE_MARGIN;
