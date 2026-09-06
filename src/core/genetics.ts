@@ -141,7 +141,7 @@ export function randomDna(rng: Rng): Rules {
     if (!body.includes('f')) body = 'f' + body;
     rules[name] = cleanSymbols(body);
   }
-  // Make sure something recursive or long enough exists so it grows a few steps.
-  if (!Object.values(rules).some((r) => [...r].some(isVariable))) rules.A += rng.pick(names);
+  // Make sure A leads somewhere, so the plant grows for more than one step.
+  if (![...rules.A].some(isVariable)) rules.A += rng.pick(names);
   return rules;
 }

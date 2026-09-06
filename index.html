@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Grammar Garden</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌱</text></svg>" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700&family=Nunito:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <section id="field-wrap">
+        <canvas id="field" aria-label="The garden"></canvas>
+        <div id="weather-badge" class="badge"></div>
+        <div id="toast" class="toast" hidden></div>
+      </section>
+
+      <aside id="panel">
+        <header class="panel-head">
+          <h1>Grammar Garden</h1>
+          <div class="controls">
+            <button id="btn-play" class="big" title="Play / pause (space)">⏸ Pause</button>
+            <button id="btn-step" class="big" title="One tick">⏭ Step</button>
+            <button id="btn-rain" class="big" title="Start the rain now">🌧 Rain now</button>
+          </div>
+          <label class="slider">
+            <span>Speed</span>
+            <input id="speed" type="range" min="1" max="10" step="1" value="5" />
+            <output id="speed-out"></output>
+          </label>
+        </header>
+
+        <section class="card" id="stats">
+          <h2>The garden</h2>
+          <div class="stat-grid">
+            <div><b id="st-plants">0</b><span>plants</span></div>
+            <div><b id="st-seeds">0</b><span>seeds</span></div>
+            <div><b id="st-flowers">0</b><span>flowers</span></div>
+            <div><b id="st-gen">0</b><span>top generation</span></div>
+            <div><b id="st-born">0</b><span>babies</span></div>
+            <div><b id="st-visits">0</b><span>bug visits</span></div>
+            <div><b id="st-collapsed">0</b><span>collapsed</span></div>
+            <div><b id="st-shaded">0</b><span>shaded out</span></div>
+            <div><b id="st-old">0</b><span>died of age</span></div>
+          </div>
+          <div class="muted" id="st-tick"></div>
+        </section>
+
+        <section class="card" id="inspector">
+          <h2 id="insp-title">Seed designer</h2>
+          <canvas id="insp-canvas"></canvas>
+          <div id="insp-info" class="info"></div>
+          <div class="health"><div id="health-bar"></div></div>
+          <label class="dna-label" for="dna">Recipe (DNA)</label>
+          <textarea id="dna" rows="3" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
+          <div id="verdict" class="verdict"></div>
+          <div class="btn-row">
+            <button id="btn-apply" class="primary">✔ Apply</button>
+            <button id="btn-clone">🌱 Clone to seed</button>
+            <button id="btn-plant">🌱 Plant new seed</button>
+            <button id="btn-surprise">🎲 Surprise me</button>
+            <button id="btn-remove" class="danger">✕ Remove</button>
+          </div>
+        </section>
+
+        <details class="card" id="legend">
+          <summary><h2>📖 How recipes work</h2></summary>
+          <p>Every plant starts as the letter <code>A</code>. Each time it rains, every capital letter is swapped for its rule. The small letters tell the pen what to draw:</p>
+          <table>
+            <tr><td><code>f</code></td><td>go forward, drawing a line</td></tr>
+            <tr><td><code>b</code></td><td>go backward, drawing a line</td></tr>
+            <tr><td><code>l</code> <code>r</code></td><td>turn left / right a little</td></tr>
+            <tr><td><code>+</code> <code>-</code></td><td>bigger / smaller steps</td></tr>
+            <tr><td><code>[</code> <code>]</code></td><td>start a branch / hop back to where it started</td></tr>
+            <tr><td><code>g</code></td><td>green pen (leafy, bendy)</td></tr>
+            <tr><td><code>w</code></td><td>wood pen (brown, strong)</td></tr>
+            <tr><td><code>y</code></td><td>a yellow flower here (bees love these)</td></tr>
+            <tr><td><code>p</code></td><td>a pink flower here (butterflies love these)</td></tr>
+          </table>
+          <p>Plants fall over if their lines cross, if a green stem holds up too much, or if they grow down into the dirt.</p>
+          <h3>Try a recipe</h3>
+          <div id="starters" class="starters"></div>
+        </details>
+
+        <details class="card" id="settings">
+          <summary><h2>⚙️ World settings</h2></summary>
+          <div id="settings-body"></div>
+          <label class="check"><input id="selfing" type="checkbox" /> Bugs can pollinate a plant with itself</label>
+        </details>
+
+        <section class="card" id="file">
+          <div class="btn-row">
+            <button id="btn-save">💾 Save garden</button>
+            <button id="btn-load">📂 Load garden</button>
+            <button id="btn-new">🌍 New garden</button>
+            <input id="file-input" type="file" accept="application/json,.json" hidden />
+          </div>
+          <label class="slider">
+            <span id="mute" role="button" tabindex="0" title="Mute">🔊</span>
+            <input id="volume" type="range" min="0" max="1" step="0.05" value="0.5" />
+          </label>
+        </section>
+      </aside>
+    </div>
+    <script type="module" src="/src/app/main.ts"></script>
+  </body>
+</html>

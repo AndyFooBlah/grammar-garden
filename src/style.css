@@ -1,0 +1,400 @@
+:root {
+  --paper: #f4f7f1;
+  --paper-2: #e9eee3;
+  --ink: #22301f;
+  --ink-2: #5a6a55;
+  --line: #cfd8c8;
+  --accent: #3d7d2f;
+  --accent-2: #5aa84a;
+  --sun: #f0bd2c;
+  --pink: #ee6ea8;
+  --bad: #c3462d;
+  --mono-bg: #eef3ea;
+  --panel-w: 360px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: 'Nunito', 'Segoe UI', system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+#app {
+  display: grid;
+  grid-template-columns: 1fr var(--panel-w);
+  height: 100%;
+}
+
+#field-wrap {
+  position: relative;
+  min-width: 0;
+}
+
+#field {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.badge {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  background: rgba(255, 255, 255, 0.75);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-weight: 700;
+  font-family: 'Baloo 2', sans-serif;
+  font-size: 1.05rem;
+  pointer-events: none;
+}
+
+.toast {
+  position: absolute;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  background: var(--ink);
+  color: var(--paper);
+  padding: 8px 16px;
+  border-radius: 999px;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+#panel {
+  overflow-y: auto;
+  border-left: 2px solid var(--line);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--paper);
+}
+
+h1 {
+  font-family: 'Baloo 2', sans-serif;
+  font-size: 1.7rem;
+  color: var(--accent);
+  margin: 0 0 6px;
+  line-height: 1.1;
+}
+
+h2 {
+  font-family: 'Baloo 2', sans-serif;
+  font-size: 1.1rem;
+  margin: 0 0 6px;
+  display: inline;
+}
+
+h3 {
+  font-family: 'Baloo 2', sans-serif;
+  font-size: 1rem;
+  margin: 10px 0 4px;
+}
+
+.card {
+  background: var(--paper-2);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+.card > h2 {
+  display: block;
+}
+
+details > summary {
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+details > summary::-webkit-details-marker {
+  display: none;
+}
+
+details > summary h2::after {
+  content: ' ▸';
+  color: var(--ink-2);
+}
+
+details[open] > summary h2::after {
+  content: ' ▾';
+}
+
+details[open] > summary {
+  margin-bottom: 6px;
+}
+
+button {
+  font: inherit;
+  font-weight: 700;
+  border: 0;
+  border-radius: 10px;
+  padding: 7px 10px;
+  background: #fff;
+  color: var(--ink);
+  cursor: pointer;
+  box-shadow: 0 1px 0 var(--line);
+}
+
+button:hover {
+  background: #fbfdf9;
+}
+
+button:active {
+  transform: translateY(1px);
+}
+
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 3px solid var(--sun);
+  outline-offset: 1px;
+}
+
+button.big {
+  font-family: 'Baloo 2', sans-serif;
+  font-size: 1.05rem;
+  padding: 8px 12px;
+}
+
+button.primary {
+  background: var(--accent);
+  color: #fff;
+}
+
+button.primary:hover {
+  background: #356d29;
+}
+
+button.danger {
+  color: var(--bad);
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.controls,
+.btn-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.slider {
+  display: grid;
+  grid-template-columns: 9.5em 1fr 3.6em;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+  margin: 2px 0;
+}
+
+.slider span {
+  color: var(--ink-2);
+  font-weight: 600;
+}
+
+.slider output {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+input[type='range'] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px 8px;
+}
+
+.stat-grid div {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+
+.stat-grid b {
+  font-family: 'Baloo 2', sans-serif;
+  font-size: 1.35rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-grid span {
+  font-size: 0.78rem;
+  color: var(--ink-2);
+}
+
+.muted {
+  color: var(--ink-2);
+  font-size: 0.85rem;
+  margin-top: 6px;
+}
+
+#insp-canvas {
+  width: 100%;
+  height: 210px;
+  border-radius: 8px;
+  display: block;
+  margin-bottom: 6px;
+}
+
+.info {
+  font-size: 0.9rem;
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 2px 10px;
+}
+
+.info dt {
+  color: var(--ink-2);
+  font-weight: 600;
+}
+
+.info dd {
+  margin: 0;
+}
+
+.info .mut {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.info button.link {
+  background: none;
+  box-shadow: none;
+  padding: 0 2px;
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.health {
+  height: 8px;
+  background: #fff;
+  border-radius: 999px;
+  overflow: hidden;
+  margin: 6px 0;
+}
+
+#health-bar {
+  height: 100%;
+  width: 100%;
+  background: var(--accent-2);
+  transition: width 0.3s;
+}
+
+.dna-label {
+  display: block;
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: var(--ink-2);
+  margin-top: 4px;
+}
+
+textarea#dna {
+  width: 100%;
+  font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+  font-size: 1.05rem;
+  line-height: 1.4;
+  border: 2px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 8px;
+  resize: vertical;
+  background: #fff;
+  color: var(--ink);
+}
+
+.verdict {
+  font-weight: 700;
+  margin: 6px 0;
+  min-height: 1.4em;
+}
+
+.verdict.ok {
+  color: var(--accent);
+}
+
+.verdict.bad {
+  color: var(--bad);
+}
+
+code {
+  font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+  background: var(--mono-bg);
+  padding: 0 4px;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+
+#legend table {
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+#legend td {
+  padding: 2px 6px 2px 0;
+  vertical-align: top;
+}
+
+#legend p {
+  margin: 6px 0;
+  font-size: 0.9rem;
+}
+
+.starters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.starters button {
+  font-size: 0.9rem;
+}
+
+.check {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 0.9rem;
+  margin-top: 6px;
+}
+
+#file .slider {
+  grid-template-columns: 2em 1fr;
+}
+
+#mute {
+  cursor: pointer;
+  font-size: 1.1rem;
+}
+
+@media (max-width: 860px) {
+  #app {
+    grid-template-columns: 1fr;
+    grid-template-rows: 55vh 1fr;
+  }
+  #panel {
+    border-left: 0;
+    border-top: 2px solid var(--line);
+  }
+}

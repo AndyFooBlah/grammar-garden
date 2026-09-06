@@ -44,7 +44,7 @@ export const DEFAULT_SETTINGS: Settings = {
   maxSteps: 12,
   maxSymbols: 200,
   turnAngle: 15,
-  stepPx: 10,
+  stepPx: 12,
   maxLoad: 12,
   mutationRate: 0.15,
   shadeMargin: 10,
@@ -60,7 +60,7 @@ const GEOMETRY_KEYS: (keyof Settings)[] = ['turnAngle', 'stepPx', 'maxLoad', 'ma
 
 const SHADE_DAMAGE = 4;
 const OLD_AGE_DAMAGE = 3;
-const DYING_TICKS = 3;
+export const DYING_TICKS = 3;
 const SKY_BOTTOM = 40;
 const EDGE_MARGIN = 20;
 
