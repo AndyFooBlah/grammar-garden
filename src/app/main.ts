@@ -1,9 +1,10 @@
 import { describePlant, FamilyTracker } from '../core/families';
 import { randomDna } from '../core/genetics';
+import { classify, KIND_COLORS, KIND_WORDS, KINDS } from '../core/phenotype';
 import { formatDna, formatDnaLines, parseDna } from '../core/grammar';
 import { describeVerdict } from '../core/structure';
 import { STARTERS } from '../core/starters';
-import { DEFAULT_SETTINGS, World, type Plant, type SaveFile, type Settings, type WorldEvent } from '../core/world';
+import { DEFAULT_SETTINGS, HISTORY_EVERY, World, type Plant, type SaveFile, type Settings, type WorldEvent } from '../core/world';
 import { Sounds } from './audio';
 import { closeFamilyTree, openFamilyTree } from './family';
 import { clampCamera, drawField, drawInspector, fieldView, fitZoom, hitTest, minimapRect, showsWholeField, toWorldX, type Camera } from './render';
@@ -55,6 +56,9 @@ const speedInput = $<HTMLInputElement>('speed');
 const speedOut = $<HTMLOutputElement>('speed-out');
 const populationEl = $<HTMLDetailsElement>('population');
 const populationBody = $('population-body');
+const kindsEl = $<HTMLDetailsElement>('kinds');
+const kindsChart = $<HTMLCanvasElement>('kinds-chart');
+const kindsLegend = $('kinds-legend');
 
 // ---------- helpers ----------
 
@@ -141,7 +145,62 @@ function doTick(): void {
   refreshStats();
   refreshInspector();
   refreshPopulation();
+  refreshKinds();
 }
+
+// ---------- kinds of plants ----------
+
+function refreshKinds(): void {
+  if (!kindsEl.open) return;
+  const counts = world.kindCounts();
+  kindsLegend.innerHTML = KINDS.map((k) => `<div><i style="background:${KIND_COLORS[k]}"></i><b>${counts[k]}</b><span>${KIND_WORDS[k]}</span></div>`).join('');
+  drawKindsChart();
+}
+
+/** Stacked area chart of the kind mix over the sampled history. */
+function drawKindsChart(): void {
+  const dpr = window.devicePixelRatio || 1;
+  const w = Math.max(1, kindsChart.clientWidth);
+  const h = Math.max(1, kindsChart.clientHeight);
+  kindsChart.width = w * dpr;
+  kindsChart.height = h * dpr;
+  const ctx = kindsChart.getContext('2d')!;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  const rows = world.history;
+  if (rows.length < 2) {
+    ctx.fillStyle = '#5a6a55';
+    ctx.font = '13px Nunito, sans-serif';
+    ctx.fillText('The chart fills in as the garden grows.', 10, h / 2);
+    return;
+  }
+  const pad = { l: 4, r: 4, t: 6, b: 16 };
+  const max = Math.max(1, ...rows.map((r) => r.reduce((a, b) => a + b, 0)));
+  const x = (i: number) => pad.l + (i / (rows.length - 1)) * (w - pad.l - pad.r);
+  const y = (v: number) => h - pad.b - (v / max) * (h - pad.t - pad.b);
+  // Stack from the bottom kind up.
+  const base = rows.map(() => 0);
+  KINDS.forEach((k, ki) => {
+    ctx.fillStyle = KIND_COLORS[k];
+    ctx.beginPath();
+    rows.forEach((r, i) => {
+      const v = base[i] + r[ki];
+      if (i === 0) ctx.moveTo(x(i), y(v));
+      else ctx.lineTo(x(i), y(v));
+    });
+    for (let i = rows.length - 1; i >= 0; i--) ctx.lineTo(x(i), y(base[i]));
+    ctx.closePath();
+    ctx.fill();
+    rows.forEach((r, i) => (base[i] += r[ki]));
+  });
+  ctx.fillStyle = '#5a6a55';
+  ctx.font = '11px Nunito, sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText(`tick ${Math.max(0, world.tick - (rows.length - 1) * HISTORY_EVERY)}`, pad.l, h - 3);
+  ctx.textAlign = 'right';
+  ctx.fillText(`tick ${world.tick} · ${max} plants at most`, w - pad.r, h - 3);
+}
+kindsEl.addEventListener('toggle', refreshKinds);
 
 function frame(now: number): void {
   const dt = Math.min(now - last, 250);
@@ -289,6 +348,7 @@ function refreshInspector(): void {
   const mutated = plant.mutated.length ? `<dt>Mutated</dt><dd class="mut">✨ rule${plant.mutated.length > 1 ? 's' : ''} ${plant.mutated.join(', ')}</dd>` : '';
   const sunWord = plant.stage === 'seed' ? 'none yet, seeds have no green' : `+${plant.sun.toFixed(1)} sunlight, −${plant.upkeep.toFixed(1)} upkeep`;
   infoEl.innerHTML = `<dt>Status</dt><dd>${stageWords[plant.stage]} · ${zoneName} climate</dd>
+    <dt>Kind</dt><dd>${classify(grown)}</dd>
     <dt>Energy</dt><dd>${sunWord}</dd>
     <dt>Water</dt><dd>${waterWord}</dd>
     <dt>Age</dt><dd>${plant.age} of ${world.settings.lifespan} ticks</dd>
@@ -706,6 +766,7 @@ function replaceWorld(next: World): void {
   refreshStats();
   refreshInspector();
   refreshPopulation();
+  refreshKinds();
   autosave();
 }
 
@@ -772,6 +833,7 @@ window.addEventListener('resize', () => {
   refreshInspector();
   populationKey = '';
   refreshPopulation();
+  refreshKinds();
 });
 // First draw after layout has settled, so canvases measure their real size.
 requestAnimationFrame((now) => {

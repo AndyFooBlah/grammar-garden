@@ -9,6 +9,10 @@ them.
 
 **Play it:** https://andyfooblah.github.io/grammar-garden/
 
+![A garden after 750 ticks: a dry, sunny climate on the left and a rainy one on the right, with woody shrubs, flowering herbs and a bee at work](docs/screenshot.jpg)
+
+*Tick 750 of a run with the default settings: the dry left half (10% rain) and the wet right half (80% rain), 64 different recipes alive, generation 16.*
+
 The full game design, kept current with the code, is in [DESIGN.md](DESIGN.md).
 
 ## What you can do
@@ -20,6 +24,9 @@ The full game design, kept current with the code, is in [DESIGN.md](DESIGN.md).
   recipe and fate.
 - See **who is winning**: living plants grouped into families of similar
   recipes, with a size history for each.
+- Watch the **kinds of plants** shift: every plant is sorted into grass, herb,
+  bush, shrub or tree from its height, width and woodiness, and a stacked
+  chart shows the mix over time.
 - Tune the world: two climate zones with their own rain, soil that soaks and
   dries, sunlight strength, upkeep costs, mutation rate, bug counts and more.
 - Pan and zoom around a wide field; save the whole garden to a JSON file and

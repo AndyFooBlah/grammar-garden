@@ -6,6 +6,7 @@ import { crossover, mutate, randomDna } from './genetics';
 import { formatDna, parseDna } from './grammar';
 import { computeLight, type LightMap } from './light';
 import { randomName } from './names';
+import { classify, emptyCounts, KINDS, type Kind } from './phenotype';
 import { growPlant, type GrownPlant } from './plant';
 import { Rng } from './rng';
 import { STARTERS } from './starters';
@@ -20,7 +21,7 @@ export interface Settings {
   /** Soil moisture gained per rainy tick and lost per sunny tick (linear). */
   rainRate: number;
   dryRate: number;
-  /** Moisture a plant needs per unit of tissue: green counts 1, a flower 2, wood 0.2. */
+  /** Moisture a plant needs per unit of tissue: green counts 1, a flower 2, wood 0.1. */
   waterScale: number;
   /** Energy lost per tick for every 10% the soil is drier than the plant needs. */
   thirstDamage: number;
@@ -59,13 +60,13 @@ export interface Settings {
 
 export const DEFAULT_SETTINGS: Settings = {
   tickMs: 1000,
-  rainLeft: 0.2,
-  rainRight: 0.5,
-  cycleLength: 28,
-  rainRate: 0.1,
-  dryRate: 0.04,
+  rainLeft: 0.1,
+  rainRight: 0.8,
+  cycleLength: 40,
+  rainRate: 0.15,
+  dryRate: 0.02,
   waterScale: 0.01,
-  thirstDamage: 8,
+  thirstDamage: 6,
   lifespan: 400,
   bees: 4,
   butterflies: 4,
@@ -77,15 +78,15 @@ export const DEFAULT_SETTINGS: Settings = {
   turnAngle: 15,
   stepPx: 12,
   maxLoad: 12,
-  maxWoodLoad: 60,
+  maxWoodLoad: 300,
   mutationRate: 0.35,
   allowSelfing: false,
   fieldWidth: 3600,
   skyHeight: 320,
-  bugSpeed: 220,
+  bugSpeed: 400,
   visitChance: 0.6,
   sunPower: 0.6,
-  rainLight: 0.3,
+  rainLight: 0.5,
   baseUpkeep: 0.6,
   woodUpkeep: 0.05,
   greenUpkeep: 0.01,
@@ -116,6 +117,8 @@ export interface Zone {
   ticksLeft: number;
   /** Soil moisture, 0 (bone dry) to 1 (saturated). */
   moisture: number;
+  /** Tick when the sun last came out here; bugs rush to the freshest sunshine. */
+  sunSince?: number;
 }
 
 export interface ParentRef {
@@ -167,6 +170,8 @@ export interface Pollen {
   name: string;
   dna: string;
   generation: number;
+  /** Where the pollen came from, so a seed can fall near either parent. */
+  x: number;
 }
 
 export interface Bug {
@@ -220,7 +225,13 @@ export interface SaveFile {
   bugs: Bug[];
   lineage: LineageRecord[];
   nextId: number;
+  /** Counts of each plant kind (in KINDS order) sampled every HISTORY_EVERY ticks. */
+  history?: number[][];
 }
+
+/** How often (ticks) the kind mix is sampled, and how many samples are kept. */
+export const HISTORY_EVERY = 5;
+const HISTORY_CAP = 600;
 
 /** Older save formats: v1 predates energy and lineage, v2 predates climate zones. */
 type SaveFileV2 = Omit<SaveFile, 'version' | 'zones'> & { version: 2; weather: Weather };
@@ -240,6 +251,8 @@ export class World {
   bugs: Bug[] = [];
   lineage = new Map<number, LineageRecord>();
   nextId = 1;
+  /** Kind mix over time, one row of counts (KINDS order) per sample. */
+  history: number[][] = [];
   rng: Rng;
   /** Sunlight map from the last update; null before the first tick. */
   light: LightMap | null = null;
@@ -277,6 +290,13 @@ export class World {
     return this.zones.map((z, i) => (z.kind === 'sun' ? i : -1)).filter((i) => i >= 0);
   }
 
+  /** The sunny zone where the sun came out most recently: flowers just opened after rain. */
+  freshestSunnyZone(sunny: number[]): number {
+    let best = sunny[0];
+    for (const i of sunny) if ((this.zones[i].sunSince ?? -1) > (this.zones[best].sunSince ?? -1)) best = i;
+    return best;
+  }
+
   /** Length of the next spell, from the zone's rain fraction and cycle length, with a little jitter. */
   private spellLength(zone: number, kind: WeatherKind): number {
     const s = this.settings;
@@ -306,7 +326,7 @@ export class World {
       else green++;
     }
     const flowers = grown.flowers.y + grown.flowers.p;
-    return Math.min(1, this.settings.waterScale * (green + 2 * flowers + 0.2 * wood));
+    return Math.min(1, this.settings.waterScale * (green + 2 * flowers + 0.1 * wood));
   }
 
   /** A fresh garden: about one seed per 120 px, two thirds starter recipes (repeated) and one third random. */
@@ -530,7 +550,21 @@ export class World {
     this.energyAll(events);
     this.syncBugs();
     this.moveBugs(events);
+    if (this.tick % HISTORY_EVERY === 0) this.sampleHistory();
     return events;
+  }
+
+  /** How many living plants of each kind there are right now. */
+  kindCounts(): Record<Kind, number> {
+    const counts = emptyCounts();
+    for (const p of this.livePlants()) counts[classify(this.geometry(p))]++;
+    return counts;
+  }
+
+  private sampleHistory(): void {
+    const counts = this.kindCounts();
+    this.history.push(KINDS.map((k) => counts[k]));
+    if (this.history.length > HISTORY_CAP) this.history.splice(0, this.history.length - HISTORY_CAP);
   }
 
   private advanceWeather(events: WorldEvent[]): void {
@@ -546,6 +580,7 @@ export class World {
       }
       z.kind = next;
       z.ticksLeft = len;
+      if (next === 'sun') z.sunSince = this.tick;
       events.push({ type: 'weather', zone: i, kind: next });
     });
   }
@@ -667,21 +702,22 @@ export class World {
     }
   }
 
-  /** A random point in the sky over one of the sunny zones. */
-  private randomSkyPoint(sunny: number[]): { x: number; y: number } {
+  /** A random point in the sky over a sunny zone, usually the one where the sun came out last. */
+  private randomSkyPoint(sunny: number[], _bug: Bug): { x: number; y: number } {
     const half = this.settings.fieldWidth / 2;
-    const zone = this.rng.pick(sunny);
+    const zone = this.rng.chance(0.8) ? this.freshestSunnyZone(sunny) : this.rng.pick(sunny);
     return {
       x: this.rng.range(zone * half + EDGE_MARGIN, (zone + 1) * half - EDGE_MARGIN),
       y: -this.rng.range(SKY_BOTTOM, this.settings.skyHeight),
     };
   }
 
-  /** Plants in sunny zones with flowers of the bug's colour, weighted by flower count. */
+  /** Plants in sunny zones with flowers of the bug's colour, weighted by flower count, favouring the freshest sunshine. */
   private chooseFlowerPlant(bug: Bug, sunny: number[]): Plant | null {
     const kind = bug.kind === 'bee' ? 'y' : 'p';
+    const fresh = this.freshestSunnyZone(sunny);
     const candidates = this.livePlants().filter((p) => p.stage !== 'seed' && sunny.includes(this.zoneOf(p.x)));
-    const weights = candidates.map((p) => this.geometry(p).flowers[kind]);
+    const weights = candidates.map((p) => this.geometry(p).flowers[kind] * (this.zoneOf(p.x) === fresh ? 4 : 1));
     const i = this.rng.weighted(weights);
     return i < 0 ? null : candidates[i];
   }
@@ -745,7 +781,7 @@ export class World {
           bug.targetFlower = this.rng.int(1000);
           continue;
         }
-        const p = this.randomSkyPoint(sunny);
+        const p = this.randomSkyPoint(sunny, bug);
         bug.tx = p.x;
         bug.ty = p.y;
       }
@@ -757,7 +793,7 @@ export class World {
   private visit(bug: Bug, plant: Plant, events: WorldEvent[]): void {
     this.stats.visits++;
     events.push({ type: 'visit', kind: bug.kind, x: bug.x, y: bug.y });
-    const here: Pollen = { plantId: plant.id, name: plant.name, dna: plant.dna, generation: plant.generation };
+    const here: Pollen = { plantId: plant.id, name: plant.name, dna: plant.dna, generation: plant.generation, x: plant.x };
     if (!bug.carrying) {
       bug.carrying = here;
       return;
@@ -767,8 +803,9 @@ export class World {
     const childRules = crossover(parseDna(mother.dna), parseDna(plant.dna), this.rng);
     const { rules, mutated } = mutate(childRules, this.settings.mutationRate, this.rng);
     bug.carrying = null;
+    // The seed falls near one parent or the other, so pollen from far away can seed its home patch.
     const child = this.addSeed(formatDna(rules), {
-      near: plant.x,
+      near: this.rng.chance(0.5) ? (mother.x ?? plant.x) : plant.x,
       parents: [
         { id: mother.plantId, name: mother.name },
         { id: plant.id, name: plant.name },
@@ -811,6 +848,7 @@ export class World {
       bugs: this.bugs.map((b) => ({ ...b, carrying: b.carrying ? { ...b.carrying } : null })),
       lineage: [...this.lineage.values()].map((r) => ({ ...r, parents: r.parents.map((p) => ({ ...p })), mutated: [...r.mutated] })),
       nextId: this.nextId,
+      history: this.history.map((row) => [...row]),
     };
   }
 
@@ -844,6 +882,7 @@ export class World {
       }
     }
     w.nextId = data.nextId;
+    if (data.version === 3 && data.history) w.history = data.history.map((row) => [...row]);
     w.syncBugs();
     w.updateLight();
     return w;

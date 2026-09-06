@@ -46,8 +46,8 @@ describe('FamilyTracker', () => {
 describe('describePlant', () => {
   it('describes the starters sensibly', () => {
     const s = DEFAULT_SETTINGS;
-    expect(describePlant(growPlant('A=fB;B=fC;C=y', 12, s))).toBe('short · green · 🟡 few');
-    expect(describePlant(growPlant('A=wfA', 12, s))).toBe('medium · woody · no flowers');
+    expect(describePlant(growPlant('A=fB;B=fC;C=y', 12, s))).toBe('grass · short · 🟡 few');
+    expect(describePlant(growPlant('A=wfA', 12, s))).toBe('tree · medium · no flowers');
     expect(describePlant(growPlant('A=wf[lB][rB]wfA;B=gf[lgf][rgf]p', 12, s))).toContain('🩷 many');
   });
 });

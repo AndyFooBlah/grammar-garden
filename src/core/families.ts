@@ -4,6 +4,7 @@
  * from tick to tick and remember their size over time.
  */
 import { parseDna, type Rules } from './grammar';
+import { classify } from './phenotype';
 import type { GrownPlant } from './plant';
 import type { Plant } from './world';
 
@@ -128,20 +129,9 @@ export class FamilyTracker {
 
 /** Plain words for a plant's shape, for the family list. */
 export function describePlant(grown: GrownPlant): string {
-  let wood = 0;
-  let green = 0;
-  for (const s of grown.geo.segs) {
-    if (s.pen === 'w') wood++;
-    else green++;
-  }
-  const total = wood + green;
-  const words: string[] = [];
-  if (total === 0) return 'never grows';
-  words.push(grown.height < 60 ? 'short' : grown.height < 150 ? 'medium' : 'tall');
-  const woodShare = wood / total;
-  words.push(woodShare >= 0.5 ? 'woody' : woodShare >= 0.2 ? 'part-wood' : 'green');
-  const width = grown.geo.maxX - grown.geo.minX;
-  if (width > grown.height * 0.6) words.push('bushy');
+  const kind = classify(grown);
+  if (kind === 'seed') return 'never grows';
+  const words: string[] = [kind, grown.height < 60 ? 'short' : grown.height < 150 ? 'medium' : 'tall'];
   const { y, p } = grown.flowers;
   if (y + p === 0) words.push('no flowers');
   else {
