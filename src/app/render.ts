@@ -70,10 +70,13 @@ export function clampCamera(cam: Camera, canvasWidth: number, world: World): Cam
   return { x: Math.min(maxX, Math.max(0, cam.x)), zoom };
 }
 
+/** Depth of dirt shown under the ground line, in screen px. The soil is anchored to the bottom of the pane. */
+const SOIL_DEPTH = 56;
+
 export function fieldView(canvas: HTMLCanvasElement, world: World, cam: Camera): View {
   const { width, height } = fitCanvas(canvas);
   const c = clampCamera(cam, width, world);
-  return { width, height, scale: c.zoom, camX: c.x, groundY: height * 0.84 };
+  return { width, height, scale: c.zoom, camX: c.x, groundY: Math.max(height * 0.5, height - SOIL_DEPTH) };
 }
 
 export const toScreenX = (view: View, wx: number): number => (wx - view.camX) * view.scale;
@@ -88,7 +91,7 @@ export interface FieldFrame {
 }
 
 const LOW_ENERGY = 25;
-const SKY_SHADE = 0.22;
+const SKY_SHADE = 0.14;
 const GROUND_SHADE = 0.32;
 const MINIMAP = { w: 260, h: 34, margin: 12 };
 
@@ -377,7 +380,9 @@ function drawBug(ctx: CanvasRenderingContext2D, bug: Bug, view: View, frame: Fie
 
 /** Screen rectangle of the minimap, so clicks on it can be routed. */
 export function minimapRect(view: View): { x: number; y: number; w: number; h: number } {
-  return { x: MINIMAP.margin, y: view.height - MINIMAP.h - MINIMAP.margin, w: MINIMAP.w, h: MINIMAP.h };
+  // Leave room for the zoom buttons on narrow screens.
+  const w = Math.max(80, Math.min(MINIMAP.w, view.width - 170));
+  return { x: MINIMAP.margin, y: view.height - MINIMAP.h - MINIMAP.margin, w, h: MINIMAP.h };
 }
 
 /** True when the camera already shows the whole field, so no minimap is needed. */

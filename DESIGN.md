@@ -108,7 +108,8 @@ The intended pressures: in the wet zone light is scarce (30% during rain) so pla
 
 The default field is now 3,600 px wide (three screens) with room for 120 plants and four of each bug, so there is space for real diversity. The field is viewed through a **camera**:
 
-- Start zoomed out so the whole field fits. **Drag** or **scroll** the field to pan; **pinch** or ctrl+scroll to zoom; the round **−**, **⤢** (fit) and **+** buttons do the same; arrow keys pan, `+`/`−`/`0` zoom.
+- The ground line is anchored a fixed 56 px above the bottom of the pane, so a taller window shows more sky rather than more dirt.
+- Start zoomed out so the whole field fits, and keep fitting when the window is resized until the player zooms or pans. **Drag** or **scroll** the field to pan; **pinch** or ctrl+scroll to zoom; the round **−**, **⤢** (fit) and **+** buttons do the same; arrow keys pan, `+`/`−`/`0` zoom.
 - Whenever the view is zoomed in, a **minimap** strip at the bottom left shows every plant as a tick (pink if it flowers), the soil colour of both zones, and a green rectangle for the current view. Clicking the strip jumps there.
 - Picking a plant from the population card, the family tree, or a parent link scrolls the view to it.
 - The field width for *new* gardens is a slider in settings (1,200 to 12,000 px).
@@ -202,7 +203,7 @@ Brackets are always inserted and deleted as matched pairs so the rule stays well
 - **Legend.** A one-card cheat sheet of the symbols, worded for a child, with three or four starter recipes you can click to load into the editor.
 - **New seed** button: plants a seed with the editor's current DNA (or a random one) at a free spot.
 - **Family tree (v2).** A full-screen overlay from the inspector: the selected plant at the bottom, parents above, back four generations, each drawn as a small close-up with its name, generation and a ✨ if a rule mutated when it was born. Curved lines connect children to parents; the same ancestor can appear on both sides. Tapping any plant shows its recipe and fate (alive, collapsed, starved, old age) with "Use this recipe" and, if alive, "Show in garden". Every plant ever born is kept in a lineage archive (capped at 4,000, oldest dead records pruned first) that survives save and load.
-- **Who is winning? (v2).** A card grouping living plants by exact recipe: a close-up, the count, the share of the population as a bar, and a 👀 button that cycles through the plants with that recipe. The stats line also reports how many different recipes are alive.
+- **Who is winning? (v2, reworked v3).** A card grouping living plants into **families** of similar recipes, because once mutation is common exact matches are rare. Recipes are compared rule by rule with edit distance (a rule only one side has counts as fully different), and a recipe joins the first family whose representative is within 30% of it, most common first. A family keeps a stable identity from tick to tick and a history of its size, drawn as a small sparkline. Each row shows a close-up of the family's most common recipe, member count and share bar, how many distinct recipes it holds, the oldest member's name, a plain-words description of the shape ("tall · woody · 🩷 many"), the recipe, and a 👀 button that cycles through members.
 
 ## 8. Sounds
 

@@ -1,3 +1,4 @@
+import { describePlant, FamilyTracker } from '../core/families';
 import { randomDna } from '../core/genetics';
 import { formatDna, formatDnaLines, parseDna } from '../core/grammar';
 import { describeVerdict } from '../core/structure';
@@ -28,6 +29,9 @@ let editorDirty = false;
 const sounds = new Sounds();
 /** Start zoomed out so the whole field is visible; zoom 0 means "fit" until the canvas has a size. */
 let cam: Camera = { x: 0, zoom: 0 };
+/** While true the view keeps fitting the whole field, even when the window is resized. */
+let fitMode = true;
+const families = new FamilyTracker();
 
 // ---------- elements ----------
 
@@ -128,6 +132,7 @@ function autosave(): void {
 
 function doTick(): void {
   handleEvents(world.step());
+  families.update(world.livePlants());
   if (selectedId !== null && !world.plantById(selectedId)) {
     selectedId = null;
     editorDirty = false;
@@ -157,7 +162,7 @@ function frame(now: number): void {
 // ---------- camera ----------
 
 function currentView() {
-  if (cam.zoom === 0) cam = { x: 0, zoom: fitZoom(Math.max(1, fieldCanvas.clientWidth), world) };
+  if (cam.zoom === 0 || fitMode) cam = { x: 0, zoom: fitZoom(Math.max(1, fieldCanvas.clientWidth), world) };
   const view = fieldView(fieldCanvas, world, cam);
   cam = { x: view.camX, zoom: view.scale };
   return view;
@@ -166,6 +171,7 @@ function currentView() {
 /** Zoom by a factor, keeping the world point under screen x `sx` fixed. */
 function zoomBy(factor: number, sx?: number): void {
   const view = currentView();
+  fitMode = false;
   const anchor = sx ?? view.width / 2;
   const wx = toWorldX(view, anchor);
   const zoom = view.scale * factor;
@@ -174,17 +180,20 @@ function zoomBy(factor: number, sx?: number): void {
 
 function panBy(dxScreen: number): void {
   const view = currentView();
+  fitMode = false;
   cam = clampCamera({ x: view.camX + dxScreen / view.scale, zoom: view.scale }, view.width, world);
 }
 
 /** Bring a world x into view, centred, zooming in a little if the whole field is showing. */
 function focusOn(wx: number): void {
   const view = currentView();
+  fitMode = false;
   const zoom = showsWholeField(view, world) ? Math.max(view.scale, 1) : view.scale;
   cam = clampCamera({ x: wx - view.width / zoom / 2, zoom }, view.width, world);
 }
 
 function zoomFit(): void {
+  fitMode = true;
   cam = { x: 0, zoom: 0 };
 }
 
@@ -379,42 +388,76 @@ $('family').addEventListener('click', (e) => {
   if (e.target === e.currentTarget) closeFamilyTree();
 });
 
-// ---------- population ----------
+// ---------- families ----------
 
 let populationKey = '';
 function refreshPopulation(): void {
   if (!populationEl.open) return;
-  const groups = world.genotypes().slice(0, 8);
+  const fams = families.families.slice(0, 8);
   const total = world.livePlants().length || 1;
-  const key = groups.map((g) => `${g.dna}:${g.count}`).join('|');
+  const key = fams.map((f) => `${f.id}:${f.members.length}:${f.rep}`).join('|');
   if (key === populationKey) return;
   populationKey = key;
   populationBody.innerHTML = '';
-  if (!groups.length) {
+  if (!fams.length) {
     populationBody.innerHTML = '<p class="muted">Nobody is alive right now.</p>';
     return;
   }
-  for (const g of groups) {
+  for (const f of fams) {
     const row = document.createElement('div');
     row.className = 'geno';
     const canvas = document.createElement('canvas');
     const mid = document.createElement('div');
-    const pct = Math.round((100 * g.count) / total);
-    mid.innerHTML = `<div><span class="count">${g.count}</span> <span class="muted">${pct}% · like ${g.plants[0].name}</span></div>
+    const pct = Math.round((100 * f.members.length) / total);
+    const grown = world.preview(f.rep, world.settings.maxSteps);
+    const oldest = f.members.reduce((a, b) => (a.age >= b.age ? a : b));
+    mid.innerHTML = `<div><span class="count">${f.members.length}</span> <span class="muted">${pct}% · ${f.variants} recipe${f.variants === 1 ? '' : 's'} · ${oldest.name}'s family</span></div>
       <div class="bar"><div style="width:${pct}%"></div></div>
-      <div class="dna" title="${g.dna}">${g.dna}</div>`;
+      <div class="desc">${describePlant(grown)}</div>
+      <div class="dna" title="${f.rep}">${f.rep}</div>`;
+    const spark = document.createElement('canvas');
+    spark.className = 'spark';
+    spark.title = 'Family size over the last few hundred ticks';
     const btn = document.createElement('button');
     btn.textContent = '👀';
     btn.title = 'Show one of these';
     let i = 0;
     btn.addEventListener('click', () => {
-      const p = g.plants[i++ % g.plants.length];
+      const p = f.members[i++ % f.members.length];
       if (world.plantById(p.id)) select(p.id, true);
     });
-    row.append(canvas, mid, btn);
+    const side = document.createElement('div');
+    side.className = 'geno-side';
+    side.append(spark, btn);
+    row.append(canvas, mid, side);
     populationBody.append(row);
-    drawInspector(canvas, world.preview(g.dna, world.settings.maxSteps), []);
+    drawInspector(canvas, grown, []);
+    drawSparkline(spark, f.history);
   }
+}
+
+/** A tiny line chart of a family's size over time. */
+function drawSparkline(canvas: HTMLCanvasElement, history: number[]): void {
+  const dpr = window.devicePixelRatio || 1;
+  const w = 64;
+  const h = 22;
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  const ctx = canvas.getContext('2d')!;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  if (history.length < 2) return;
+  const max = Math.max(...history, 1);
+  ctx.strokeStyle = '#3d7d2f';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  history.forEach((v, i) => {
+    const x = (i / (history.length - 1)) * (w - 2) + 1;
+    const y = h - 1 - (v / max) * (h - 3);
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  ctx.stroke();
 }
 populationEl.addEventListener('toggle', () => {
   populationKey = '';
@@ -436,6 +479,7 @@ fieldCanvas.addEventListener('pointerdown', (e) => {
   const mm = minimapRect(view);
   if (!showsWholeField(view, world) && pt.x >= mm.x && pt.x <= mm.x + mm.w && pt.y >= mm.y && pt.y <= mm.y + mm.h) {
     // Jump the view to where the minimap was clicked.
+    fitMode = false;
     const wx = ((pt.x - mm.x) / mm.w) * world.settings.fieldWidth;
     cam = clampCamera({ x: wx - view.width / view.scale / 2, zoom: view.scale }, view.width, world);
     return;
@@ -653,6 +697,8 @@ function replaceWorld(next: World): void {
   editorDirty = false;
   acc = 0;
   zoomFit();
+  families.reset();
+  families.update(world.livePlants());
   populationKey = '';
   syncSettingsUi();
   refreshStats();
@@ -718,8 +764,13 @@ buildStarters();
 syncSpeedUi();
 if (!world.plants.length) world = World.newGarden();
 setEditor(STARTERS[3].dna);
+families.update(world.livePlants());
 refreshStats();
-window.addEventListener('resize', refreshInspector);
+window.addEventListener('resize', () => {
+  refreshInspector();
+  populationKey = '';
+  refreshPopulation();
+});
 // First draw after layout has settled, so canvases measure their real size.
 requestAnimationFrame((now) => {
   last = now;
