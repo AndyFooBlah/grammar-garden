@@ -142,7 +142,7 @@ export function drawField(ctx: CanvasRenderingContext2D, world: World, view: Vie
         ctx.rotate(dir * progress * progress * 1.4);
       }
     } else if (plant.energy < LOW_ENERGY) {
-      // Starving plants fade so a child can see who is in trouble.
+      // Starving plants fade so it is clear who is in trouble.
       ctx.globalAlpha = 0.45 + 0.55 * (plant.energy / LOW_ENERGY);
     }
     if (plant.id === frame.selectedId) {
