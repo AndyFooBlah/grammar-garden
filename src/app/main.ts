@@ -5,7 +5,7 @@ import { STARTERS } from '../core/starters';
 import { DEFAULT_SETTINGS, World, type Plant, type SaveFile, type Settings, type WorldEvent } from '../core/world';
 import { Sounds } from './audio';
 import { closeFamilyTree, openFamilyTree } from './family';
-import { drawField, drawInspector, fieldView, hitTest } from './render';
+import { clampCamera, drawField, drawInspector, fieldView, fitZoom, hitTest, minimapRect, showsWholeField, toWorldX, type Camera } from './render';
 
 const AUTOSAVE_KEY = 'grammar-garden-autosave';
 const AUTOSAVE_EVERY = 5;
@@ -26,6 +26,8 @@ let selectedId: number | null = null;
 /** True while the recipe box holds text the user typed that has not been applied. */
 let editorDirty = false;
 const sounds = new Sounds();
+/** Start zoomed out so the whole field is visible; zoom 0 means "fit" until the canvas has a size. */
+let cam: Camera = { x: 0, zoom: 0 };
 
 // ---------- elements ----------
 
@@ -39,7 +41,7 @@ const titleEl = $('insp-title');
 const energyBar = $('energy-bar');
 const energyLabel = $('energy-label');
 const toastEl = $('toast');
-const weatherBadge = $('weather-badge');
+const zoneBadges = [$('zone-left'), $('zone-right')];
 const btnPlay = $<HTMLButtonElement>('btn-play');
 const btnApply = $<HTMLButtonElement>('btn-apply');
 const btnClone = $<HTMLButtonElement>('btn-clone');
@@ -84,7 +86,7 @@ function handleEvents(events: WorldEvent[]): void {
         sounds.rustle();
         break;
       case 'weather':
-        sounds.setRain(e.kind === 'rain');
+        sounds.setRain(world.anyRain());
         break;
     }
   }
@@ -147,9 +149,43 @@ function frame(now: number): void {
       doTick();
     }
   }
-  const view = fieldView(fieldCanvas, world);
+  const view = currentView();
   drawField(fieldCtx, world, view, { t: Math.min(1, acc / tickMs), time: now, selectedId });
   requestAnimationFrame(frame);
+}
+
+// ---------- camera ----------
+
+function currentView() {
+  if (cam.zoom === 0) cam = { x: 0, zoom: fitZoom(Math.max(1, fieldCanvas.clientWidth), world) };
+  const view = fieldView(fieldCanvas, world, cam);
+  cam = { x: view.camX, zoom: view.scale };
+  return view;
+}
+
+/** Zoom by a factor, keeping the world point under screen x `sx` fixed. */
+function zoomBy(factor: number, sx?: number): void {
+  const view = currentView();
+  const anchor = sx ?? view.width / 2;
+  const wx = toWorldX(view, anchor);
+  const zoom = view.scale * factor;
+  cam = clampCamera({ x: wx - anchor / zoom, zoom }, view.width, world);
+}
+
+function panBy(dxScreen: number): void {
+  const view = currentView();
+  cam = clampCamera({ x: view.camX + dxScreen / view.scale, zoom: view.scale }, view.width, world);
+}
+
+/** Bring a world x into view, centred, zooming in a little if the whole field is showing. */
+function focusOn(wx: number): void {
+  const view = currentView();
+  const zoom = showsWholeField(view, world) ? Math.max(view.scale, 1) : view.scale;
+  cam = clampCamera({ x: wx - view.width / zoom / 2, zoom }, view.width, world);
+}
+
+function zoomFit(): void {
+  cam = { x: 0, zoom: 0 };
 }
 
 // ---------- stats ----------
@@ -172,9 +208,13 @@ function refreshStats(): void {
   $('st-collapsed').textContent = String(world.stats.collapsed);
   $('st-starved').textContent = String(world.stats.starved);
   $('st-old').textContent = String(world.stats.old);
-  $('st-tick').textContent = `Tick ${world.tick} · ${live.length}/${world.settings.maxPlants} spots used · ${world.genotypes().length} different recipes`;
-  const w = world.weather;
-  weatherBadge.textContent = w.kind === 'rain' ? `🌧 Raining, ${w.ticksLeft} to go` : `☀️ Sunny, ${w.ticksLeft} to go`;
+  $('st-thirst').textContent = String(world.stats.thirst);
+  $('st-recipes').textContent = String(world.genotypes().length);
+  $('st-tick').textContent = `Tick ${world.tick} · ${live.length}/${world.settings.maxPlants} spots used`;
+  world.zones.forEach((z, i) => {
+    const weather = z.kind === 'rain' ? `🌧 Rain, ${z.ticksLeft} to go` : `☀️ Sun, ${z.ticksLeft} to go`;
+    zoneBadges[i].textContent = `${weather} · soil ${Math.round(z.moisture * 100)}%`;
+  });
 }
 
 // ---------- inspector ----------
@@ -205,6 +245,7 @@ function refreshInspector(): void {
   }
 
   const upkeep = world.upkeepFor(grown, 0);
+  const need = world.waterNeedFor(grown);
   if (!plant) {
     titleEl.textContent = 'Seed designer';
     energyBar.style.width = '0%';
@@ -212,6 +253,7 @@ function refreshInspector(): void {
     infoEl.innerHTML = `<dt>Recipe size</dt><dd>${grown.str.length} symbols after ${grown.steps} steps</dd>
       <dt>Flowers</dt><dd>🟡 ${grown.flowers.y} · 🩷 ${grown.flowers.p}</dd>
       <dt>Upkeep</dt><dd>${upkeep.toFixed(1)} energy per tick when fully grown</dd>
+      <dt>Water</dt><dd>needs soil at least ${Math.round(need * 100)}% wet</dd>
       <dt>Tip</dt><dd>Click a plant in the garden to see its recipe, or write one here and plant it.</dd>`;
     return;
   }
@@ -220,38 +262,49 @@ function refreshInspector(): void {
     seed: 'a seed, waiting for rain',
     growing: 'growing',
     mature: 'fully grown',
-    dying: plant.deathReason === 'collapsed' ? 'collapsed!' : plant.deathReason === 'starved' ? 'starved' : 'died of old age',
+    dying: plant.deathReason === 'collapsed' ? 'collapsed!' : plant.deathReason === 'starved' ? 'starved' : plant.deathReason === 'thirst' ? 'died of thirst' : 'died of old age',
   };
+  const zone = world.zoneOfPlant(plant);
+  const zoneName = world.zoneOf(plant.x) === 0 ? 'left' : 'right';
+  const soilPct = Math.round(zone.moisture * 100);
+  const needPct = Math.round(need * 100);
+  const waterWord = need === 0 ? 'nothing yet' : `needs ${needPct}%, soil is ${soilPct}%${plant.thirst > 0 ? ` 💧 thirsty, −${plant.thirst.toFixed(1)}` : ''}`;
   titleEl.textContent = `${plant.name} · generation ${plant.generation}`;
   const pct = Math.round((100 * plant.energy) / world.settings.energyMax);
   energyBar.style.width = `${pct}%`;
-  const net = plant.sun - plant.upkeep;
+  const net = plant.sun - plant.upkeep - plant.thirst;
   energyLabel.textContent = `energy ${Math.round(plant.energy)} · ${net >= 0 ? '+' : ''}${net.toFixed(1)} per tick`;
   const parents = plant.parents.length
     ? plant.parents.map((r) => `<button class="link" data-select="${r.id}">${r.name}</button>`).join(' + ')
     : 'none, a starter seed';
   const mutated = plant.mutated.length ? `<dt>Mutated</dt><dd class="mut">✨ rule${plant.mutated.length > 1 ? 's' : ''} ${plant.mutated.join(', ')}</dd>` : '';
   const sunWord = plant.stage === 'seed' ? 'none yet, seeds have no green' : `+${plant.sun.toFixed(1)} sunlight, −${plant.upkeep.toFixed(1)} upkeep`;
-  infoEl.innerHTML = `<dt>Status</dt><dd>${stageWords[plant.stage]}</dd>
+  infoEl.innerHTML = `<dt>Status</dt><dd>${stageWords[plant.stage]} · ${zoneName} climate</dd>
     <dt>Energy</dt><dd>${sunWord}</dd>
+    <dt>Water</dt><dd>${waterWord}</dd>
     <dt>Age</dt><dd>${plant.age} of ${world.settings.lifespan} ticks</dd>
     <dt>Grown</dt><dd>${plant.steps} steps, ${grown.str.length} symbols</dd>
     <dt>Flowers</dt><dd>🟡 ${grown.flowers.y} · 🩷 ${grown.flowers.p}</dd>
     <dt>Parents</dt><dd>${parents}</dd>${mutated}`;
 }
 
-function select(id: number | null): void {
-  if (id === selectedId) return;
-  selectedId = id;
-  editorDirty = false;
-  refreshInspector();
+function select(id: number | null, focus = false): void {
+  if (id !== selectedId) {
+    selectedId = id;
+    editorDirty = false;
+    refreshInspector();
+  }
+  if (focus && id !== null) {
+    const p = world.plantById(id);
+    if (p) focusOn(p.x);
+  }
 }
 
 infoEl.addEventListener('click', (e) => {
   const btn = (e.target as HTMLElement).closest<HTMLElement>('[data-select]');
   if (!btn) return;
   const id = Number(btn.dataset.select);
-  if (world.plantById(id)) select(id);
+  if (world.plantById(id)) select(id, true);
   else toast('That parent is gone now. Try the family tree.');
 });
 
@@ -276,7 +329,7 @@ btnClone.addEventListener('click', () => {
   const seed = world.clonePlant(plant.id);
   if (!seed) return toast('No room for another seed');
   sounds.plip();
-  select(seed.id);
+  select(seed.id, true);
   refreshStats();
 });
 
@@ -286,7 +339,7 @@ $('btn-plant').addEventListener('click', () => {
   const seed = world.addSeed(formatDna(rules));
   if (!seed) return toast('No room for another seed');
   sounds.plip();
-  select(seed.id);
+  select(seed.id, true);
   refreshStats();
 });
 
@@ -311,7 +364,7 @@ btnFamily.addEventListener('click', () => {
   if (!plant) return;
   setPaused(true);
   openFamilyTree(world, plant.id, {
-    select: (id) => select(id),
+    select: (id) => select(id, true),
     useRecipe: (dna) => {
       select(null);
       setEditor(dna);
@@ -356,7 +409,7 @@ function refreshPopulation(): void {
     let i = 0;
     btn.addEventListener('click', () => {
       const p = g.plants[i++ % g.plants.length];
-      if (world.plantById(p.id)) select(p.id);
+      if (world.plantById(p.id)) select(p.id, true);
     });
     row.append(canvas, mid, btn);
     populationBody.append(row);
@@ -368,14 +421,72 @@ populationEl.addEventListener('toggle', () => {
   refreshPopulation();
 });
 
-// ---------- field interaction ----------
+// ---------- field interaction: click to select, drag to pan, wheel to pan, pinch or ctrl+wheel to zoom ----------
+
+let drag: { startX: number; lastX: number; moved: boolean; pointerId: number } | null = null;
+
+function canvasPoint(e: PointerEvent | WheelEvent): { x: number; y: number } {
+  const rect = fieldCanvas.getBoundingClientRect();
+  return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+}
 
 fieldCanvas.addEventListener('pointerdown', (e) => {
-  const rect = fieldCanvas.getBoundingClientRect();
-  const view = fieldView(fieldCanvas, world);
-  const hit = hitTest(world, view, e.clientX - rect.left, e.clientY - rect.top);
-  select(hit ? hit.id : null);
+  const pt = canvasPoint(e);
+  const view = currentView();
+  const mm = minimapRect(view);
+  if (!showsWholeField(view, world) && pt.x >= mm.x && pt.x <= mm.x + mm.w && pt.y >= mm.y && pt.y <= mm.y + mm.h) {
+    // Jump the view to where the minimap was clicked.
+    const wx = ((pt.x - mm.x) / mm.w) * world.settings.fieldWidth;
+    cam = clampCamera({ x: wx - view.width / view.scale / 2, zoom: view.scale }, view.width, world);
+    return;
+  }
+  drag = { startX: pt.x, lastX: pt.x, moved: false, pointerId: e.pointerId };
+  fieldCanvas.setPointerCapture(e.pointerId);
 });
+
+fieldCanvas.addEventListener('pointermove', (e) => {
+  if (!drag || e.pointerId !== drag.pointerId) return;
+  const pt = canvasPoint(e);
+  if (!drag.moved && Math.abs(pt.x - drag.startX) > 5) drag.moved = true;
+  if (drag.moved) {
+    panBy(drag.lastX - pt.x);
+    fieldCanvas.style.cursor = 'grabbing';
+  }
+  drag.lastX = pt.x;
+});
+
+const endDrag = (e: PointerEvent) => {
+  if (!drag || e.pointerId !== drag.pointerId) return;
+  const wasClick = !drag.moved;
+  drag = null;
+  fieldCanvas.style.cursor = '';
+  if (wasClick) {
+    const pt = canvasPoint(e);
+    const hit = hitTest(world, currentView(), pt.x, pt.y);
+    select(hit ? hit.id : null);
+  }
+};
+fieldCanvas.addEventListener('pointerup', endDrag);
+fieldCanvas.addEventListener('pointercancel', endDrag);
+
+fieldCanvas.addEventListener(
+  'wheel',
+  (e) => {
+    e.preventDefault();
+    const pt = canvasPoint(e);
+    if (e.ctrlKey || e.metaKey) {
+      // Pinch on a trackpad arrives as ctrl+wheel; so does ctrl+scroll on a mouse.
+      zoomBy(Math.exp(-e.deltaY * 0.01), pt.x);
+    } else {
+      panBy(Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY);
+    }
+  },
+  { passive: false },
+);
+
+$('btn-zoom-in').addEventListener('click', () => zoomBy(1.5));
+$('btn-zoom-out').addEventListener('click', () => zoomBy(1 / 1.5));
+$('btn-zoom-fit').addEventListener('click', zoomFit);
 
 // ---------- controls ----------
 
@@ -391,18 +502,22 @@ $('btn-step').addEventListener('click', () => {
   doTick();
 });
 $('btn-rain').addEventListener('click', () => {
-  if (world.weather.kind === 'rain') return;
-  world.weather = { kind: 'rain', ticksLeft: world.settings.rainTicks };
+  world.rainNow();
   sounds.setRain(true);
   refreshStats();
 });
 
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') closeFamilyTree();
-  if (e.code === 'Space' && !(e.target instanceof HTMLTextAreaElement) && !(e.target instanceof HTMLInputElement)) {
+  if (e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement) return;
+  if (e.code === 'Space') {
     e.preventDefault();
     setPaused(!paused);
-  }
+  } else if (e.key === 'ArrowLeft') panBy(-80);
+  else if (e.key === 'ArrowRight') panBy(80);
+  else if (e.key === '+' || e.key === '=') zoomBy(1.5);
+  else if (e.key === '-') zoomBy(1 / 1.5);
+  else if (e.key === '0') zoomFit();
 });
 
 /** Speed slider: left is slow, right is fast; shown as ticks per second. */
@@ -436,12 +551,17 @@ interface Spec {
 
 const pctFmt = (v: number) => `${Math.round(v * 100)}%`;
 const SPECS: Spec[] = [
-  { key: 'sunTicks', label: 'Sunny spell', min: 2, max: 60, step: 1, format: (v) => `${v} ticks` },
-  { key: 'rainTicks', label: 'Rain spell', min: 1, max: 40, step: 1, format: (v) => `${v} ticks` },
+  { key: 'rainLeft', label: 'Rain on the left', min: 0, max: 1, step: 0.05, format: pctFmt },
+  { key: 'rainRight', label: 'Rain on the right', min: 0, max: 1, step: 0.05, format: pctFmt },
+  { key: 'cycleLength', label: 'Weather cycle', min: 2, max: 400, step: 2, format: (v) => `${v} ticks` },
+  { key: 'rainRate', label: 'Soil soaks', min: 0.01, max: 0.5, step: 0.01, format: (v) => `${Math.round(v * 100)}%/tick` },
+  { key: 'dryRate', label: 'Soil dries', min: 0.005, max: 0.3, step: 0.005, format: (v) => `${(v * 100).toFixed(1)}%/tick` },
+  { key: 'waterScale', label: 'Thirstiness', min: 0, max: 0.05, step: 0.001, format: (v) => v.toFixed(3) },
+  { key: 'thirstDamage', label: 'Thirst damage', min: 0, max: 10, step: 0.5, format: (v) => `${v.toFixed(1)}/10% dry` },
   { key: 'lifespan', label: 'Plant lifespan', min: 20, max: 2000, step: 20, format: (v) => `${v} ticks` },
   { key: 'bees', label: 'Bees', min: 0, max: 8, step: 1 },
   { key: 'butterflies', label: 'Butterflies', min: 0, max: 8, step: 1 },
-  { key: 'maxPlants', label: 'Room for plants', min: 5, max: 80, step: 1 },
+  { key: 'maxPlants', label: 'Room for plants', min: 5, max: 300, step: 5 },
   { key: 'seedSpacing', label: 'Seed spacing', min: 2, max: 120, step: 2, format: (v) => `${v} px` },
   { key: 'maxSteps', label: 'Growth steps', min: 1, max: 30, step: 1 },
   { key: 'maxSymbols', label: 'Recipe size limit', min: 20, max: 1000, step: 10 },
@@ -503,6 +623,9 @@ function syncSettingsUi(): void {
   syncSpeedUi();
 }
 
+const worldWidth = $<HTMLInputElement>('world-width');
+worldWidth.addEventListener('input', () => ($('world-width-out') as HTMLOutputElement).value = `${worldWidth.value} px`);
+
 // ---------- legend ----------
 
 function buildStarters(): void {
@@ -529,8 +652,9 @@ function replaceWorld(next: World): void {
   selectedId = null;
   editorDirty = false;
   acc = 0;
+  zoomFit();
   populationKey = '';
-  sounds.setRain(world.weather.kind === 'rain');
+  sounds.setRain(world.anyRain());
   syncSettingsUi();
   refreshStats();
   refreshInspector();
@@ -564,7 +688,7 @@ fileInput.addEventListener('change', async () => {
 
 $('btn-new').addEventListener('click', () => {
   if (!confirm('Start a brand new garden? The current one will be replaced (save it first if you want to keep it).')) return;
-  replaceWorld(World.newGarden({ ...DEFAULT_SETTINGS, tickMs: world.settings.tickMs }));
+  replaceWorld(World.newGarden({ ...DEFAULT_SETTINGS, tickMs: world.settings.tickMs, fieldWidth: Number($<HTMLInputElement>('world-width').value) }));
   toast('A fresh field of seeds');
 });
 
@@ -586,7 +710,7 @@ mute.addEventListener('keydown', (e) => {
 });
 const unlock = () => {
   sounds.unlock();
-  sounds.setRain(world.weather.kind === 'rain');
+  sounds.setRain(world.anyRain());
 };
 document.addEventListener('pointerdown', unlock, { capture: true });
 document.addEventListener('keydown', unlock, { capture: true });

@@ -60,6 +60,32 @@ body {
   pointer-events: none;
 }
 
+.badge.right {
+  left: auto;
+  right: 12px;
+}
+
+.zoom-bar {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  display: flex;
+  gap: 4px;
+}
+
+.zoom-bar button {
+  font-family: 'Baloo 2', sans-serif;
+  font-size: 1.2rem;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: 999px;
+}
+
+#field {
+  cursor: grab;
+}
+
 .toast {
   position: absolute;
   left: 50%;

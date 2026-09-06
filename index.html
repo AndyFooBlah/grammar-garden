@@ -13,7 +13,13 @@
     <div id="app">
       <section id="field-wrap">
         <canvas id="field" aria-label="The garden"></canvas>
-        <div id="weather-badge" class="badge"></div>
+        <div id="zone-left" class="badge"></div>
+        <div id="zone-right" class="badge right"></div>
+        <div class="zoom-bar">
+          <button id="btn-zoom-out" title="Zoom out (−)">−</button>
+          <button id="btn-zoom-fit" title="See the whole field (0)">⤢</button>
+          <button id="btn-zoom-in" title="Zoom in (+)">+</button>
+        </div>
         <div id="toast" class="toast" hidden></div>
       </section>
 
@@ -39,10 +45,12 @@
             <div><b id="st-seeds">0</b><span>seeds</span></div>
             <div><b id="st-flowers">0</b><span>flowers</span></div>
             <div><b id="st-gen">0</b><span>top generation</span></div>
+            <div><b id="st-recipes">0</b><span>different recipes</span></div>
             <div><b id="st-born">0</b><span>babies</span></div>
             <div><b id="st-visits">0</b><span>bug visits</span></div>
             <div><b id="st-collapsed">0</b><span>collapsed</span></div>
             <div><b id="st-starved">0</b><span>starved</span></div>
+            <div><b id="st-thirst">0</b><span>died of thirst</span></div>
             <div><b id="st-old">0</b><span>died of age</span></div>
           </div>
           <div class="muted" id="st-tick"></div>
@@ -88,6 +96,7 @@
           </table>
           <p>Plants fall over if their lines cross, if a green stem holds up too much, or if they grow down into the dirt.</p>
           <p>Green catches sunlight, but only what reaches it: every green bit above it takes half, and wood blocks the light completely. Wood and flowers cost energy every tick. A plant that runs out of energy starves.</p>
+          <p>The field has two climates, left and right, each with its own rain and sun. Rain soaks the soil and sun dries it (the dirt colour and the % show how wet it is). Green and flowers are thirsty, wood hardly at all. A plant in soil drier than it needs loses energy fast.</p>
           <h3>Try a recipe</h3>
           <div id="starters" class="starters"></div>
         </details>
@@ -96,6 +105,8 @@
           <summary><h2>⚙️ World settings</h2></summary>
           <div id="settings-body"></div>
           <label class="check"><input id="selfing" type="checkbox" /> Bugs can pollinate a plant with itself</label>
+          <label class="slider"><span>Field width</span><input id="world-width" type="range" min="1200" max="12000" step="400" value="3600" /><output id="world-width-out">3600 px</output></label>
+          <p class="muted">Field width applies when you start a new garden. Drag or scroll the field to move around, pinch or ctrl+scroll to zoom.</p>
         </details>
 
         <section class="card" id="file">

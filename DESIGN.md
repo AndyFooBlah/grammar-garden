@@ -92,6 +92,27 @@ Energy at zero means the plant **starves**. A seed starts with 50 energy and no 
 
 The starter recipes at full sun, from the calibration script: Bramble nets about +3.5 energy per tick, Candle with its 22 flowers about +1, Tower (all wood) −1.2, a bare seed −0.6.
 
+## 3c. Two climates and soil water (v3)
+
+The field is split down the middle into a **left** and a **right climate**, each with its own weather and its own soil.
+
+- **Weather per zone.** Each zone alternates rain and sun spells. Two settings shape it: the zone's **rain fraction** (average share of rainy ticks; left 20% and right 50% by default) and a shared **cycle length** (28 ticks by default). A spell's length is its share of the cycle with ±25% jitter, so the two zones drift out of step. Cycle length 2 alternates every tick; 200 gives a hundred of each. Growth happens during a plant's own zone's rain.
+- **Soil moisture** (0–100%) rises linearly while it rains (10% per tick) and falls linearly in the sun (4% per tick). The dirt colour goes from pale and dry to dark and wet, and a badge over each zone shows the weather, ticks to go, and soil percentage.
+- **Water need.** Each plant needs the soil to be at least as wet as 1% × (green segments + 2 × flowers + 0.2 × wood segments), capped at 100%. Green and flowers are thirsty; wood hardly at all. The inspector shows the need next to the current soil.
+- **Thirst.** When the soil is drier than the need, the plant loses 3 energy per tick for every 10% of the shortfall. Big leafy plants in dry soil die within a few ticks; a small deficit is a slow drain. **Died of thirst** is its own death reason and statistic.
+- **Bugs** only work where the sun is out. If one zone rains, they fly to the other; if both rain they shelter at the field's edges as before.
+
+The intended pressures: in the wet zone light is scarce (30% during rain) so plants need more green to pay their way; in the dry zone water is scarce so green and flowers cost water and wood-heavy, modest plants win. "Rain now" starts rain in both zones.
+
+## 3d. A bigger world (v3)
+
+The default field is now 3,600 px wide (three screens) with room for 120 plants and four of each bug, so there is space for real diversity. The field is viewed through a **camera**:
+
+- Start zoomed out so the whole field fits. **Drag** or **scroll** the field to pan; **pinch** or ctrl+scroll to zoom; the round **−**, **⤢** (fit) and **+** buttons do the same; arrow keys pan, `+`/`−`/`0` zoom.
+- Whenever the view is zoomed in, a **minimap** strip at the bottom left shows every plant as a tick (pink if it flowers), the soil colour of both zones, and a green rectangle for the current view. Clicking the strip jumps there.
+- Picking a plant from the population card, the family tree, or a parent link scrolls the view to it.
+- The field width for *new* gardens is a slider in settings (1,200 to 12,000 px).
+
 ## 4. Life cycle of a plant
 
 ```
@@ -174,7 +195,7 @@ Brackets are always inserted and deleted as matched pairs so the rule stays well
 └──────────────────────────────────────────────┴───────────────────┘
 ```
 
-- **Field (left, most of the screen).** Sky band on top shows the weather. The ground line is about 15% from the bottom; seeds sit on it and plants grow upward. Plants are plain 2-px lines (green / brown), flowers are 4-px dots (yellow / pink), bugs are simple shapes (a striped yellow oval, a pink two-triangle butterfly). Click anything to select it; the selection gets a soft halo. Nothing needs precise clicking: the nearest plant within a generous radius is picked.
+- **Field (left, most of the screen).** Two skies, one per climate zone, show each zone's weather. The ground line is about 15% from the bottom; seeds sit on it and plants grow upward. Plants are plain 2-px lines (green / brown), flowers are 4-px dots (yellow / pink), bugs are simple shapes (a striped yellow oval, a pink two-triangle butterfly). Click anything to select it; the selection gets a soft halo. Nothing needs precise clicking: the nearest plant within a generous radius is picked.
 - **Inspector.** A close-up of the selected plant, auto-fitted, with segments drawn thicker. Auto-generated friendly name ("Zippy", "Bramble", "Pip") plus generation, age, health, status, parents (clickable to select them), and a count of flowers.
 - **DNA editor.** A large-font textarea showing one rule per line (the saved file keeps them `;`-separated; the parser accepts either). As you type, the close-up redraws at the plant's current growth step and shows ✔ or the specific problem. **Apply** replaces the plant's DNA and regrows it from seed in place. **Clone to seed** drops a new seed with a copy of the DNA at a free spot (a great way to say "I like this one, make more"). **✕** removes the plant. **Surprise me** fills the editor with a random recipe.
 - **World settings.** Sliders with plain labels: sun length, rain length, plant lifespan, bees, butterflies, room for plants, seed spacing, growth steps, recipe size limit, turn angle, step size, green stem strength, sun strength, light in rain, cost of living, cost per flower, cost per wood bit, seed energy, mutation chance, bug curiosity, allow self-pollination. Speed is its own slider at the top, shown as ticks per second. Changing a geometric setting (angle, step, load) regrows every plant so the effect is instantly visible.
@@ -207,9 +228,9 @@ The file stores the *inputs* to the simulation, not the drawn geometry, so it st
 
 ```json
 {
-  "version": 2,
+  "version": 3,
   "tick": 412,
-  "weather": { "kind": "sun", "ticksLeft": 7 },
+  "zones": [ { "kind": "sun", "ticksLeft": 7, "moisture": 0.42 }, { "kind": "rain", "ticksLeft": 3, "moisture": 0.9 } ],
   "rng": "seed-and-state",
   "settings": { "tickMs": 1000, "turnAngle": 15, "stepPx": 10, "...": "..." },
   "stats": { "born": 31, "collapsed": 9, "shaded": 5, "oldAge": 3 },
@@ -280,6 +301,7 @@ Also a handful of fully random recipes, so the first pollination round is alread
 8. Name: "Grammar Garden".
 9. Recipe size limit defaults to 200 symbols.
 10. (v2) Sunlight-and-energy model replaces root shading; seed spacing is dense and shade enforces distance.
+11. (v3) Two climate zones with soil moisture and thirst; a three-screen field with a pan/zoom camera.
 
 ## 14. Open question
 

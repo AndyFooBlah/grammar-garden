@@ -12,8 +12,18 @@ import { STARTERS } from './starters';
 
 export interface Settings {
   tickMs: number;
-  sunTicks: number;
-  rainTicks: number;
+  /** Average fraction of rainy ticks in the left / right climate zone. */
+  rainLeft: number;
+  rainRight: number;
+  /** Ticks in one rain-plus-sun cycle; 2 alternates every tick, 200 gives 100 of each. */
+  cycleLength: number;
+  /** Soil moisture gained per rainy tick and lost per sunny tick (linear). */
+  rainRate: number;
+  dryRate: number;
+  /** Moisture a plant needs per unit of tissue: green counts 1, a flower 2, wood 0.2. */
+  waterScale: number;
+  /** Energy lost per tick for every 10% the soil is drier than the plant needs. */
+  thirstDamage: number;
   lifespan: number;
   bees: number;
   butterflies: number;
@@ -45,12 +55,17 @@ export interface Settings {
 
 export const DEFAULT_SETTINGS: Settings = {
   tickMs: 1000,
-  sunTicks: 20,
-  rainTicks: 8,
+  rainLeft: 0.2,
+  rainRight: 0.5,
+  cycleLength: 28,
+  rainRate: 0.1,
+  dryRate: 0.04,
+  waterScale: 0.01,
+  thirstDamage: 3,
   lifespan: 400,
-  bees: 2,
-  butterflies: 2,
-  maxPlants: 40,
+  bees: 4,
+  butterflies: 4,
+  maxPlants: 120,
   seedSpacing: 12,
   maxSteps: 12,
   maxSymbols: 200,
@@ -59,9 +74,9 @@ export const DEFAULT_SETTINGS: Settings = {
   maxLoad: 12,
   mutationRate: 0.15,
   allowSelfing: false,
-  fieldWidth: 1200,
+  fieldWidth: 3600,
   skyHeight: 320,
-  bugSpeed: 150,
+  bugSpeed: 220,
   visitChance: 0.6,
   sunPower: 0.6,
   rainLight: 0.3,
@@ -86,8 +101,16 @@ const EDGE_MARGIN = 20;
 const LINEAGE_CAP = 4000;
 
 export type Stage = 'seed' | 'growing' | 'mature' | 'dying';
-export type DeathReason = 'collapsed' | 'starved' | 'old';
+export type DeathReason = 'collapsed' | 'starved' | 'thirst' | 'old';
 export type WeatherKind = 'sun' | 'rain';
+
+/** One climate zone: half of the field with its own weather and soil. */
+export interface Zone {
+  kind: WeatherKind;
+  ticksLeft: number;
+  /** Soil moisture, 0 (bone dry) to 1 (saturated). */
+  moisture: number;
+}
 
 export interface ParentRef {
   id: number;
@@ -107,6 +130,8 @@ export interface Plant {
   sun: number;
   /** Energy spent on upkeep last tick. */
   upkeep: number;
+  /** Energy lost to dry soil last tick. */
+  thirst: number;
   stage: Stage;
   generation: number;
   parents: ParentRef[];
@@ -160,13 +185,14 @@ export type WorldEvent =
   | { type: 'visit'; kind: BugKind; x: number; y: number }
   | { type: 'collapse'; x: number }
   | { type: 'death'; x: number }
-  | { type: 'weather'; kind: WeatherKind };
+  | { type: 'weather'; zone: number; kind: WeatherKind };
 
 export interface Stats {
   planted: number;
   born: number;
   collapsed: number;
   starved: number;
+  thirst: number;
   old: number;
   visits: number;
 }
@@ -177,10 +203,10 @@ export interface Weather {
 }
 
 export interface SaveFile {
-  version: 2;
+  version: 3;
   savedAt: string;
   tick: number;
-  weather: Weather;
+  zones: Zone[];
   rngState: number;
   settings: Settings;
   stats: Stats;
@@ -190,8 +216,9 @@ export interface SaveFile {
   nextId: number;
 }
 
-/** Saves written before the energy model and lineage archive existed. */
-type SaveFileV1 = Omit<SaveFile, 'version' | 'lineage'> & { version: 1 };
+/** Older save formats: v1 predates energy and lineage, v2 predates climate zones. */
+type SaveFileV2 = Omit<SaveFile, 'version' | 'zones'> & { version: 2; weather: Weather };
+type SaveFileV1 = Omit<SaveFileV2, 'version' | 'lineage'> & { version: 1 };
 
 interface CacheEntry {
   key: string;
@@ -200,9 +227,9 @@ interface CacheEntry {
 
 export class World {
   tick = 0;
-  weather: Weather = { kind: 'sun', ticksLeft: DEFAULT_SETTINGS.sunTicks };
+  zones: Zone[] = [];
   settings: Settings;
-  stats: Stats = { planted: 0, born: 0, collapsed: 0, starved: 0, old: 0, visits: 0 };
+  stats: Stats = { planted: 0, born: 0, collapsed: 0, starved: 0, thirst: 0, old: 0, visits: 0 };
   plants: Plant[] = [];
   bugs: Bug[] = [];
   lineage = new Map<number, LineageRecord>();
@@ -217,7 +244,63 @@ export class World {
   constructor(settings: Partial<Settings> = {}, seed = Date.now() % 2147483647) {
     this.settings = { ...DEFAULT_SETTINGS, ...settings };
     this.rng = new Rng(seed);
-    this.weather = { kind: 'sun', ticksLeft: this.settings.sunTicks };
+    // Both zones start sunny, the right one half a spell ahead so they drift apart.
+    this.zones = [
+      { kind: 'sun', ticksLeft: this.spellLength(0, 'sun'), moisture: 0.6 },
+      { kind: 'sun', ticksLeft: Math.max(1, Math.round(this.spellLength(1, 'sun') / 2)), moisture: 0.6 },
+    ];
+  }
+
+  // ---------- climate ----------
+
+  /** Which zone a field x position is in: 0 = left, 1 = right. */
+  zoneOf(x: number): number {
+    return x < this.settings.fieldWidth / 2 ? 0 : 1;
+  }
+
+  zoneOfPlant(plant: Plant): Zone {
+    return this.zones[this.zoneOf(plant.x)];
+  }
+
+  anyRain(): boolean {
+    return this.zones.some((z) => z.kind === 'rain');
+  }
+
+  /** Indices of zones where the sun is out, where bugs can work. */
+  sunnyZones(): number[] {
+    return this.zones.map((z, i) => (z.kind === 'sun' ? i : -1)).filter((i) => i >= 0);
+  }
+
+  /** Length of the next spell, from the zone's rain fraction and cycle length, with a little jitter. */
+  private spellLength(zone: number, kind: WeatherKind): number {
+    const s = this.settings;
+    const fraction = zone === 0 ? s.rainLeft : s.rainRight;
+    const share = kind === 'rain' ? fraction : 1 - fraction;
+    const base = s.cycleLength * share;
+    if (base <= 0) return 0;
+    const jitter = s.cycleLength >= 4 ? this.rng.range(0.75, 1.25) : 1;
+    return Math.max(1, Math.round(base * jitter));
+  }
+
+  /** Start rain in every zone now. */
+  rainNow(): void {
+    this.zones.forEach((z, i) => {
+      if (z.kind === 'rain') return;
+      z.kind = 'rain';
+      z.ticksLeft = this.spellLength(i, 'rain') || 1;
+    });
+  }
+
+  /** Soil moisture a plant needs, from its tissue. */
+  waterNeedFor(grown: GrownPlant): number {
+    let wood = 0;
+    let green = 0;
+    for (const seg of grown.geo.segs) {
+      if (seg.pen === 'w') wood++;
+      else green++;
+    }
+    const flowers = grown.flowers.y + grown.flowers.p;
+    return Math.min(1, this.settings.waterScale * (green + 2 * flowers + 0.2 * wood));
   }
 
   /** A fresh garden with the starter recipes and a few random ones. */
@@ -296,6 +379,7 @@ export class World {
       energy: this.settings.startEnergy,
       sun: 0,
       upkeep: 0,
+      thirst: 0,
       stage: 'seed',
       generation: opts.generation ?? 0,
       parents: opts.parents ?? [],
@@ -396,6 +480,7 @@ export class World {
       return { type: 'collapse', x: plant.x };
     }
     if (reason === 'starved') this.stats.starved++;
+    else if (reason === 'thirst') this.stats.thirst++;
     else this.stats.old++;
     return { type: 'death', x: plant.x };
   }
@@ -422,7 +507,8 @@ export class World {
     const events: WorldEvent[] = [];
     this.tick++;
     this.advanceWeather(events);
-    if (this.weather.kind === 'rain') this.growAll(events);
+    this.updateSoil();
+    this.growAll(events);
     this.updateLight();
     this.energyAll(events);
     this.syncBugs();
@@ -431,11 +517,28 @@ export class World {
   }
 
   private advanceWeather(events: WorldEvent[]): void {
-    this.weather.ticksLeft--;
-    if (this.weather.ticksLeft > 0) return;
-    if (this.weather.kind === 'sun') this.weather = { kind: 'rain', ticksLeft: this.settings.rainTicks };
-    else this.weather = { kind: 'sun', ticksLeft: this.settings.sunTicks };
-    events.push({ type: 'weather', kind: this.weather.kind });
+    this.zones.forEach((z, i) => {
+      z.ticksLeft--;
+      if (z.ticksLeft > 0) return;
+      const next: WeatherKind = z.kind === 'sun' ? 'rain' : 'sun';
+      const len = this.spellLength(i, next);
+      if (len === 0) {
+        // A zone with 0% or 100% rain never switches.
+        z.ticksLeft = this.spellLength(i, z.kind);
+        return;
+      }
+      z.kind = next;
+      z.ticksLeft = len;
+      events.push({ type: 'weather', zone: i, kind: next });
+    });
+  }
+
+  /** Rain soaks the soil, sun dries it, both at a steady rate. */
+  private updateSoil(): void {
+    const s = this.settings;
+    for (const z of this.zones) {
+      z.moisture = z.kind === 'rain' ? Math.min(1, z.moisture + s.rainRate) : Math.max(0, z.moisture - s.dryRate);
+    }
   }
 
   /** Recompute where sunlight falls. Dying plants no longer cast shade. */
@@ -448,9 +551,10 @@ export class World {
     this.lightVersion++;
   }
 
+  /** Plants grow one step per tick while it rains in their zone. */
   private growAll(events: WorldEvent[]): void {
     for (const plant of this.livePlants()) {
-      if (plant.stage === 'mature') continue;
+      if (plant.stage === 'mature' || this.zoneOfPlant(plant).kind !== 'rain') continue;
       if (plant.steps >= this.settings.maxSteps) {
         plant.stage = 'mature';
         continue;
@@ -484,10 +588,9 @@ export class World {
     return s.baseUpkeep + wood * s.woodUpkeep + green * s.greenUpkeep + flowers * s.flowerUpkeep + oldAge;
   }
 
-  /** Sunlight in, upkeep out; starve at zero. Also ages plants and clears the dead. */
+  /** Sunlight in, upkeep and thirst out; starve at zero. Also ages plants and clears the dead. */
   private energyAll(events: WorldEvent[]): void {
     const s = this.settings;
-    const lightFactor = this.weather.kind === 'sun' ? 1 : s.rainLight;
     for (const plant of this.plants) {
       if (plant.stage === 'dying') {
         plant.dyingTicks = (plant.dyingTicks ?? DYING_TICKS) - 1;
@@ -495,12 +598,17 @@ export class World {
       }
       plant.age++;
       const grown = this.geometry(plant);
+      const zone = this.zoneOfPlant(plant);
+      const lightFactor = zone.kind === 'sun' ? 1 : s.rainLight;
       plant.sun = (this.light?.gain.get(plant.id) ?? 0) * s.sunPower * lightFactor;
       plant.upkeep = this.upkeepFor(grown, plant.age);
-      plant.energy = Math.min(s.energyMax, plant.energy + plant.sun - plant.upkeep);
+      const need = this.waterNeedFor(grown);
+      plant.thirst = zone.moisture < need ? s.thirstDamage * (need - zone.moisture) * 10 : 0;
+      plant.energy = Math.min(s.energyMax, plant.energy + plant.sun - plant.upkeep - plant.thirst);
       if (plant.energy <= 0) {
         plant.energy = 0;
-        events.push(this.kill(plant, plant.age > s.lifespan ? 'old' : 'starved'));
+        const reason: DeathReason = plant.age > s.lifespan ? 'old' : plant.thirst > 0.5 ? 'thirst' : 'starved';
+        events.push(this.kill(plant, reason));
       }
     }
     const gone = this.plants.filter((p) => p.stage === 'dying' && (p.dyingTicks ?? 0) <= 0);
@@ -542,17 +650,20 @@ export class World {
     }
   }
 
-  private randomSkyPoint(): { x: number; y: number } {
+  /** A random point in the sky over one of the sunny zones. */
+  private randomSkyPoint(sunny: number[]): { x: number; y: number } {
+    const half = this.settings.fieldWidth / 2;
+    const zone = this.rng.pick(sunny);
     return {
-      x: this.rng.range(EDGE_MARGIN, this.settings.fieldWidth - EDGE_MARGIN),
+      x: this.rng.range(zone * half + EDGE_MARGIN, (zone + 1) * half - EDGE_MARGIN),
       y: -this.rng.range(SKY_BOTTOM, this.settings.skyHeight),
     };
   }
 
-  /** Plants with flowers of the bug's colour, weighted by flower count. */
-  private chooseFlowerPlant(bug: Bug): Plant | null {
+  /** Plants in sunny zones with flowers of the bug's colour, weighted by flower count. */
+  private chooseFlowerPlant(bug: Bug, sunny: number[]): Plant | null {
     const kind = bug.kind === 'bee' ? 'y' : 'p';
-    const candidates = this.livePlants().filter((p) => p.stage !== 'seed');
+    const candidates = this.livePlants().filter((p) => p.stage !== 'seed' && sunny.includes(this.zoneOf(p.x)));
     const weights = candidates.map((p) => this.geometry(p).flowers[kind]);
     const i = this.rng.weighted(weights);
     return i < 0 ? null : candidates[i];
@@ -573,10 +684,12 @@ export class World {
   }
 
   private moveBugs(events: WorldEvent[]): void {
+    const sunny = this.sunnyZones();
     for (const bug of this.bugs) {
       bug.px = bug.x;
       bug.py = bug.y;
-      if (this.weather.kind === 'rain') {
+      if (sunny.length === 0) {
+        // Rain everywhere: hide at the edge of the field.
         const s = this.shelter(bug.kind);
         bug.targetPlant = null;
         this.moveTowards(bug, s.x, s.y);
@@ -588,7 +701,7 @@ export class World {
       }
       if (bug.targetPlant !== null) {
         const plant = this.plantById(bug.targetPlant);
-        const grown = plant && plant.stage !== 'dying' ? this.geometry(plant) : null;
+        const grown = plant && plant.stage !== 'dying' && sunny.includes(this.zoneOf(plant.x)) ? this.geometry(plant) : null;
         const kind = bug.kind === 'bee' ? 'y' : 'p';
         const flowers = grown ? grown.geo.flowers.filter((f) => f.kind === kind) : [];
         if (!plant || !grown || flowers.length === 0) {
@@ -605,16 +718,17 @@ export class World {
           continue;
         }
       }
-      // Wandering: pick a flower to visit or a random point in the sky.
+      // Wandering: pick a flower to visit or a random point in the sky, always over a sunny zone.
       const arrived = Math.hypot(bug.tx - bug.x, bug.ty - bug.y) < 1;
-      if (arrived) {
-        const plant = this.rng.chance(this.settings.visitChance) ? this.chooseFlowerPlant(bug) : null;
+      const targetInRain = !sunny.includes(this.zoneOf(bug.tx));
+      if (arrived || targetInRain) {
+        const plant = this.rng.chance(this.settings.visitChance) ? this.chooseFlowerPlant(bug, sunny) : null;
         if (plant) {
           bug.targetPlant = plant.id;
           bug.targetFlower = this.rng.int(1000);
           continue;
         }
-        const p = this.randomSkyPoint();
+        const p = this.randomSkyPoint(sunny);
         bug.tx = p.x;
         bug.ty = p.y;
       }
@@ -668,10 +782,10 @@ export class World {
 
   toJSON(): SaveFile {
     return {
-      version: 2,
+      version: 3,
       savedAt: new Date().toISOString(),
       tick: this.tick,
-      weather: { ...this.weather },
+      zones: this.zones.map((z) => ({ ...z })),
       rngState: this.rng.state,
       settings: { ...this.settings },
       stats: { ...this.stats },
@@ -682,12 +796,16 @@ export class World {
     };
   }
 
-  static fromJSON(data: SaveFile | SaveFileV1): World {
-    if (!data || !(data.version === 1 || data.version === 2) || !Array.isArray(data.plants)) throw new Error('Not a Grammar Garden save file');
-    const w = new World({ ...DEFAULT_SETTINGS, ...data.settings }, 1);
+  static fromJSON(data: SaveFile | SaveFileV2 | SaveFileV1): World {
+    if (!data || !(data.version === 1 || data.version === 2 || data.version === 3) || !Array.isArray(data.plants)) throw new Error('Not a Grammar Garden save file');
+    const settings = { ...DEFAULT_SETTINGS, ...data.settings } as Settings & { sunTicks?: number; rainTicks?: number };
+    delete settings.sunTicks;
+    delete settings.rainTicks;
+    const w = new World(settings, 1);
     w.rng.state = data.rngState;
     w.tick = data.tick;
-    w.weather = { ...data.weather };
+    if (data.version === 3) w.zones = data.zones.map((z) => ({ ...z }));
+    else w.zones = [0, 1].map(() => ({ kind: data.weather.kind, ticksLeft: data.weather.ticksLeft, moisture: 0.6 }));
     w.stats = { ...w.stats, ...data.stats };
     w.plants = data.plants.map((p) => ({
       ...p,
@@ -696,9 +814,10 @@ export class World {
       energy: p.energy ?? w.settings.startEnergy,
       sun: p.sun ?? 0,
       upkeep: p.upkeep ?? 0,
+      thirst: p.thirst ?? 0,
     }));
     w.bugs = (data.bugs ?? []).map((b) => ({ ...b }));
-    const lineage = data.version === 2 ? data.lineage : [];
+    const lineage = data.version === 1 ? [] : data.lineage;
     for (const r of lineage) w.lineage.set(r.id, { ...r, parents: r.parents ?? [], mutated: r.mutated ?? [] });
     // Older saves have no archive: reconstruct what we can from the living plants.
     for (const p of w.plants) {

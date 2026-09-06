@@ -25,6 +25,8 @@ function fateWords(r: LineageRecord, world: World): string {
       return `collapsed at tick ${r.died}`;
     case 'starved':
       return `starved at tick ${r.died}`;
+    case 'thirst':
+      return `died of thirst at tick ${r.died}`;
     case 'old':
       return `died of old age at tick ${r.died}`;
     case 'removed':

@@ -13,21 +13,72 @@ describe('World', () => {
     const w = World.newGarden({}, 1);
     expect(w.plants.length).toBe(STARTERS.length + 3);
     expect(w.plants.every((p) => p.stage === 'seed')).toBe(true);
-    expect(w.bugs.length).toBe(4);
+    expect(w.bugs.length).toBe(w.settings.bees + w.settings.butterflies);
   });
 
-  it('only grows during rain', () => {
-    const w = World.newGarden({ sunTicks: 5, rainTicks: 3 }, 2);
-    run(w, 4);
-    expect(w.plants.every((p) => p.steps === 0)).toBe(true);
-    const events = run(w, 1);
-    expect(events).toContainEqual({ type: 'weather', kind: 'rain' });
+  it('only grows during rain in its own zone', () => {
+    const w = World.newGarden({ rainLeft: 0.3, rainRight: 0.3, cycleLength: 20 }, 2);
+    // Nothing grows until some zone's first rain.
+    let rained: number | null = null;
+    for (let i = 0; i < 40 && rained === null; i++) {
+      expect(w.plants.every((p) => p.steps === 0)).toBe(true);
+      const e = w.step().find((x) => x.type === 'weather' && x.kind === 'rain');
+      if (e && e.type === 'weather') rained = e.zone;
+    }
+    expect(rained).not.toBeNull();
     run(w, 1);
-    expect(w.plants.some((p) => p.steps > 0)).toBe(true);
+    const inRain = w.plants.filter((p) => w.zoneOf(p.x) === rained);
+    const inSun = w.plants.filter((p) => w.zoneOf(p.x) !== rained);
+    expect(inRain.some((p) => p.steps > 0)).toBe(true);
+    expect(inSun.every((p) => p.steps === 0)).toBe(true);
+  });
+
+  it('cycle length 2 alternates every tick, long cycles give long spells', () => {
+    const fast = new World({ rainLeft: 0.5, rainRight: 0.5, cycleLength: 2 }, 1);
+    const kinds = [];
+    for (let i = 0; i < 6; i++) {
+      fast.step();
+      kinds.push(fast.zones[0].kind);
+    }
+    expect(kinds).toEqual(['rain', 'sun', 'rain', 'sun', 'rain', 'sun']);
+    const slow = new World({ rainLeft: 0.5, rainRight: 0.5, cycleLength: 200 }, 1);
+    let switches = 0;
+    for (let i = 0; i < 400; i++) if (slow.step().some((e) => e.type === 'weather' && e.zone === 0)) switches++;
+    expect(switches).toBeLessThanOrEqual(5);
+    expect(switches).toBeGreaterThanOrEqual(2);
+  });
+
+  it('soil soaks in rain and dries in sun', () => {
+    const w = new World({ rainLeft: 1, rainRight: 0, cycleLength: 20, rainRate: 0.1, dryRate: 0.03 }, 1);
+    run(w, 10);
+    expect(w.zones[0].moisture).toBeCloseTo(1);
+    expect(w.zones[1].moisture).toBeCloseTo(0.3);
+  });
+
+  it('thirsty plants die in a dry climate and live in a wet one', () => {
+    const leafy = 'A=wfB;B=[lllgfp][rrrgfp]wfB'; // a green spike with flowering leaves: needs damp soil
+    const dry = new World({ rainLeft: 0.1, rainRight: 0.1, cycleLength: 40, lifespan: 10000 }, 3);
+    const d = dry.addSeed(leafy, { x: 300 })!;
+    run(dry, 300);
+    expect(dry.plantById(d.id)).toBeUndefined();
+    expect(dry.stats.thirst).toBe(1);
+    const wet = new World({ rainLeft: 0.5, rainRight: 0.5, cycleLength: 10, lifespan: 10000 }, 3);
+    const p = wet.addSeed(leafy, { x: 300 })!;
+    run(wet, 300);
+    expect(wet.plantById(p.id)?.energy).toBeGreaterThan(0);
+  });
+
+  it('bugs stay in the sunny zone when the other one rains', () => {
+    const w = World.newGarden({ rainLeft: 0, rainRight: 1, cycleLength: 20 }, 9);
+    run(w, 60);
+    for (const b of w.bugs) expect(w.zoneOf(b.x)).toBe(0);
+    const both = World.newGarden({ rainLeft: 1, rainRight: 1, cycleLength: 20 }, 9);
+    run(both, 60);
+    for (const b of both.bugs) expect(Math.abs(b.y)).toBeLessThanOrEqual(40);
   });
 
   it('collapses Tangle and Floppy, keeps Bramble', () => {
-    const w = World.newGarden({ sunTicks: 1, rainTicks: 30, startEnergy: 1000, energyMax: 1000 }, 3);
+    const w = World.newGarden({ rainLeft: 1, rainRight: 1, cycleLength: 30, startEnergy: 1000, energyMax: 1000 }, 3);
     const events = run(w, 32);
     expect(events.some((e) => e.type === 'collapse')).toBe(true);
     const names = (dna: string) => w.plants.find((p) => p.dna === dna);
@@ -40,7 +91,7 @@ describe('World', () => {
   });
 
   it('bugs eventually make babies', () => {
-    const w = World.newGarden({ sunTicks: 20, rainTicks: 10, maxPlants: 40 }, 4);
+    const w = World.newGarden({ maxPlants: 40 }, 4);
     const events = run(w, 400);
     expect(events.filter((e) => e.type === 'visit').length).toBeGreaterThan(0);
     expect(w.stats.born).toBeGreaterThan(0);
@@ -59,7 +110,7 @@ describe('World', () => {
   });
 
   it('starves a small plant in the shade of a big one, and feeds it in the open', () => {
-    const settings = { sunTicks: 20, rainTicks: 4, lifespan: 10000 };
+    const settings = { rainLeft: 0.5, rainRight: 0.5, cycleLength: 24, lifespan: 10000 };
     const shaded = new World(settings, 5);
     shaded.addSeed('A=wfwfwfwfwf[llllllB][rrrrrrB]A;B=g+f', { x: 300 }); // a wooden umbrella, no flowers
     const under = shaded.addSeed('A=fB;B=fC;C=y', { x: 305 })!;
@@ -80,7 +131,7 @@ describe('World', () => {
   });
 
   it('keeps a lineage archive for the family tree', () => {
-    const w = World.newGarden({ sunTicks: 20, rainTicks: 10, maxPlants: 40 }, 4);
+    const w = World.newGarden({ maxPlants: 40 }, 4);
     run(w, 400);
     const child = w.plants.find((p) => p.parents.length === 2)!;
     for (const parent of child.parents) expect(w.lineage.get(parent.id)?.name).toBe(parent.name);
@@ -98,14 +149,14 @@ describe('World', () => {
   });
 
   it('setDna regrows in place and can collapse', () => {
-    const w = World.newGarden({ sunTicks: 1, rainTicks: 10 }, 7);
+    const w = World.newGarden({ rainLeft: 1, rainRight: 1, cycleLength: 10 }, 7);
     run(w, 6);
     const sprout = w.plants.find((p) => p.dna === 'A=fB;B=fC;C=y')!;
     expect(w.setDna(sprout.id, 'A=fffffffffffffffffff')).toContainEqual({ type: 'collapse', x: sprout.x });
   });
 
   it('honours the symbol cap when settings change', () => {
-    const w = World.newGarden({ sunTicks: 1, rainTicks: 20, maxSymbols: 200 }, 8);
+    const w = World.newGarden({ rainLeft: 1, rainRight: 1, cycleLength: 20, maxSymbols: 200 }, 8);
     run(w, 21);
     const before = Math.max(...w.plants.map((p) => w.geometry(p).str.length));
     expect(before).toBeLessThanOrEqual(200);
