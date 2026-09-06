@@ -6,7 +6,7 @@
 
 Grammar Garden is a browser game in which every plant is grown from a tiny "recipe" (its DNA): a handful of rewrite rules that turn letters into strings of drawing commands. A field of dirt starts out full of seeds. When it rains, the recipes run one step at a time and the plants grow as simple colored lines. Plants whose shapes don't hold up (lines that cross, or too much green weight on a thin stem) collapse. When the sun comes out, bees and butterflies visit flowers, carry DNA from plant to plant, and drop new seeds whose recipes are a shuffled mix of both parents with a few random copying mistakes. Over many rain-and-sun cycles the field fills up with whatever recipes happen to work. The player can pause at any moment, click any plant to see and edit its recipe, clone plants, tweak the rules of the world, and save or reload the whole garden as a file.
 
-What a 7-year-old gets to discover, without anyone using the words:
+What the player gets to discover, without anyone using the words:
 - **Genotype vs. phenotype** — a short recipe makes a big, complicated plant.
 - **Selection** — some recipes make plants that fall over; those don't get to have babies.
 - **Reproduction and recombination** — bugs mix two recipes; babies look a bit like each parent.
@@ -59,7 +59,7 @@ Worked example with `A=fB;B=f[lC][rC]fB;C=gfy`:
 | 2 | `ff[lC][rC]fB` |
 | 3 | `ff[lgfy][rgfy]ff[lC][rC]fB` |
 
-Limits (world settings): a maximum number of growth steps per plant, and a maximum string length (default 200 symbols; a few hundred is plenty for a nicely complex plant) after which the plant simply stops growing. This keeps the browser responsive when a kid types `A=AAAA`.
+Limits (world settings): a maximum number of growth steps per plant, and a maximum string length (default 200 symbols; a few hundred is plenty for a nicely complex plant) after which the plant simply stops growing. This keeps the browser responsive when someone types `A=AAAA`.
 
 ### 2.3 Drawing (the turtle)
 
@@ -73,7 +73,7 @@ After every growth step, each plant's geometry is checked. A plant that fails an
 2. **Sturdiness (the wood rule).** Every segment is asked "how much plant are you holding up?" — the total length of all segments above it in the tree. A green segment snaps if that load exceeds the **green stem strength** setting (default 12 step-lengths); a wood segment holds far more but not everything: the **wood strength** setting (default 60 step-lengths, added in v4) caps it, so no plant can grow without limit. A plant needs wood at the bottom of any big structure, and wood sitting on top of a green stem doesn't help.
 3. **No growing into the dirt.** A segment that goes below the ground line is a failure. (Alternative: clip it silently. Failure is simpler to explain: "plants can't grow down into the ground".)
 
-The inspector shows *why* a plant collapsed and highlights the offending segment in red, and the DNA editor previews all three checks live as you type, so a kid can fix a recipe before planting it.
+The inspector shows *why* a plant collapsed and highlights the offending segment in red, and the DNA editor previews all three checks live as you type, so a recipe can be fixed before planting it.
 
 ## 3b. Sunlight and energy (v2)
 
@@ -83,12 +83,12 @@ Every plant keeps an **energy** store (0 to 100). Sunlight comes straight down i
 - a **wood** segment blocks all of it;
 - whatever is left lands on the dirt.
 
-Segments are treated as 4 px wide so a vertical stem still catches a little light, but a leaning or horizontal branch catches far more. The sky and dirt are drawn darker wherever light has been caught above, so a child can see exactly where the shade falls.
+Segments are treated as 4 px wide so a vertical stem still catches a little light, but a leaning or horizontal branch catches far more. The sky and dirt are drawn darker wherever light has been caught above, so it is clear exactly where the shade falls.
 
 **Income:** captured light × sun strength (default 0.6), in full on sunny ticks and at 30% during rain.
 **Upkeep every tick:** a base cost of living (0.6, paid by seeds too), 0.05 per wood segment, 0.01 per green segment, and 0.25 per flower. Past the lifespan an old-age drain is added that grows every tick, so old plants always fade out.
 
-Energy at zero means the plant **starves**. A seed starts with 50 energy and no green, so a recipe that never grows leaves dies within about 80 ticks. This replaces the old "shaded root" rule and is what makes room matter: seed spacing is now only 6 px, and a seedling under a big canopy simply cannot earn enough. The selection pressures a child can watch: grow taller than the neighbours, spread green sideways, don't carry more flowers than the sunlight pays for.
+Energy at zero means the plant **starves**. A seed starts with 50 energy and no green, so a recipe that never grows leaves dies within about 80 ticks. This replaces the old "shaded root" rule and is what makes room matter: seed spacing is now only 6 px, and a seedling under a big canopy simply cannot earn enough. The selection pressures to watch for: grow taller than the neighbours, spread green sideways, don't carry more flowers than the sunlight pays for.
 
 The starter recipes at full sun, from the calibration script: Bramble nets about +3.5 energy per tick, Candle with its 22 flowers about +1, Tower (all wood) −1.2, a bare seed −0.6.
 
@@ -125,7 +125,7 @@ seed ──rain──▶ sprout ──rain──▶ growing ──▶ mature ─
 - **Seed**: a small brown dot on the ground. Shows its DNA when clicked.
 - **Growing**: takes one growth step per tick while it is raining. Stops when it reaches the max-steps limit, the string-length limit, or its string stops changing (no variables left). Then it is **mature**.
 - **Energy**: 0–100, shown as a bar in the inspector with the net change per tick (see section 3b). At 0 the plant starves; past the lifespan the old-age drain finishes it. Either way: a soft rustle, it fades, and its space is freed. Starving plants are drawn faded so trouble is visible before it happens.
-- **Room**: the world has a max plant count (40) and a minimum seed spacing (6 px). Bugs won't drop a seed if there is no room; the seed is simply lost (a quiet "plip" doesn't play, so the kid learns that silence means the field is full). Shade does the real spacing.
+- **Room**: the world has a max plant count (40) and a minimum seed spacing (6 px). Bugs won't drop a seed if there is no room; the seed is simply lost (a quiet "plip" doesn't play, so silence means the field is full). Shade does the real spacing.
 
 ## 5. Weather and time
 
@@ -134,12 +134,12 @@ The world runs in **ticks** (default 1 second; adjustable). Weather alternates a
 - **Sun** (default 20 ticks): bugs fly and pollinate. No growth.
 - **Rain** (default 8 ticks): plants grow one step per tick. Bugs shelter (they sit still at the edge of the field). Soft rain sound in the background.
 
-Buttons: **Play/Pause**, **Step one tick**, **Make it rain now**, and a speed slider. Separating growth (rain) from pollination (sun) gives the game a rhythm a child can follow: "it rained, everything got bigger; now the bugs are out, let's see who gets a baby."
+Buttons: **Play/Pause**, **Step one tick**, **Make it rain now**, and a speed slider. Separating growth (rain) from pollination (sun) gives the game a rhythm the player can follow: "it rained, everything got bigger; now the bugs are out, let's see who gets a baby."
 
 ## 6. Bugs and reproduction
 
 - **Bees** are yellow and only visit yellow flowers. **Butterflies** are pink and only visit pink flowers. Counts of each are world settings (default 2 and 2).
-- Each bug wanders. On each sunny tick it may pick a target: a random flower of its color, weighted by how many flowers each plant has (more flowers, more visits — a selection pressure a kid can see).
+- Each bug wanders. On each sunny tick it may pick a target: a random flower of its color, weighted by how many flowers each plant has (more flowers, more visits — a visible selection pressure).
 - When a bug arrives at a flower:
   - If it is **carrying nothing**, it picks up that plant's DNA (a little glow on the bug shows it is carrying).
   - If it is **carrying DNA from a different plant**, the two DNAs are combined and a **new seed** is dropped near the plant being visited: the offset follows a heavy-tailed spread (Cauchy, scale = the **seed travel** setting, 50 px by default), so half of all seeds land within 50 px, most within a few hundred, and a few percent fly far across the field. Clones sprout beside their original the same way. If no free spot turns up after 40 tries, the seed is lost. The bug's pollen is then used up. Sound: a buzz for bees, a soft flutter for butterflies, then a "plip" for the seed.
@@ -171,7 +171,7 @@ On top of that, with probability half the mutation rate, the **genome itself** c
 - **housekeeping**: a rule that nothing refers to any more is dropped;
 - **transposition**: a balanced chunk is cut from one rule and pasted into another.
 
-A recipe never has more than eight letters. Brackets are always inserted and deleted as matched pairs so rules stay well-formed. The inspector marks mutated rules with a small ✨ (new letters included) so a kid can spot what changed compared with the parents.
+A recipe never has more than eight letters. Brackets are always inserted and deleted as matched pairs so rules stay well-formed. The inspector marks mutated rules with a small ✨ (new letters included) so it is easy to spot what changed compared with the parents.
 
 ## 7. Screen layout
 
@@ -207,7 +207,7 @@ A recipe never has more than eight letters. Brackets are always inserted and del
 - **Inspector.** A close-up of the selected plant, auto-fitted, with segments drawn thicker. Auto-generated friendly name ("Zippy", "Bramble", "Pip") plus generation, age, health, status, parents (clickable to select them), and a count of flowers.
 - **DNA editor.** A large-font textarea showing one rule per line (the saved file keeps them `;`-separated; the parser accepts either). As you type, the close-up redraws at the plant's current growth step and shows ✔ or the specific problem. **Apply** replaces the plant's DNA and regrows it from seed in place. **Clone to seed** drops a new seed with a copy of the DNA at a free spot (a great way to say "I like this one, make more"). **✕** removes the plant. **Surprise me** fills the editor with a random recipe.
 - **World settings.** Sliders with plain labels: sun length, rain length, plant lifespan, bees, butterflies, room for plants, seed spacing, growth steps, recipe size limit, turn angle, step size, green stem strength, sun strength, light in rain, cost of living, cost per flower, cost per wood bit, seed energy, mutation chance, bug curiosity, allow self-pollination. Speed is its own slider at the top, shown as ticks per second. Changing a geometric setting (angle, step, load) regrows every plant so the effect is instantly visible.
-- **Legend.** A one-card cheat sheet of the symbols, worded for a child, with three or four starter recipes you can click to load into the editor.
+- **Legend.** A one-card cheat sheet of the symbols, in plain words, with three or four starter recipes you can click to load into the editor.
 - **New seed** button: plants a seed with the editor's current DNA (or a random one) at a free spot.
 - **Family tree (v2).** A full-screen overlay from the inspector: the selected plant at the bottom, parents above, back four generations, each drawn as a small close-up with its name, generation and a ✨ if a rule mutated when it was born. Curved lines connect children to parents; the same ancestor can appear on both sides. Tapping any plant shows its recipe and fate (alive, collapsed, starved, old age) with "Use this recipe" and, if alive, "Show in garden". Every plant ever born is kept in a lineage archive (capped at 4,000, oldest dead records pruned first) that survives save and load.
 - **Who is winning? (v2, reworked v3).** A card grouping living plants into **families** of similar recipes, because once mutation is common exact matches are rare. Recipes are compared rule by rule with edit distance (a rule only one side has counts as fully different), and a recipe joins the first family whose representative is within 30% of it, most common first. A family keeps a stable identity from tick to tick and a history of its size, drawn as a small sparkline. Each row shows a close-up of the family's most common recipe, member count and share bar, how many distinct recipes it holds, the oldest member's name, a plain-words description of the shape ("tall · woody · 🩷 many"), the recipe, and a 👀 button that cycles through members.

@@ -1,6 +1,6 @@
 # Grammar Garden
 
-A browser game for exploring evolution and genetics with young children. Every
+A browser game for exploring evolution and genetics by growing plants from tiny recipes. Every
 plant grows from a tiny recipe (an L-system), plants that can't hold themselves
 up collapse, sunlight and soil water decide who thrives, and bees and
 butterflies carry recipes between flowers to make the next generation. Over
@@ -66,6 +66,10 @@ runs the tests and deploys to GitHub Pages through the workflow in
 - `src/app/` — the browser app: `render` (canvas and camera), `audio`
   (synthesized sounds), `family` (the family tree overlay), `main` (UI wiring).
 - `test/` — vitest suites for the core.
+
+## License
+
+Apache License 2.0, see [LICENSE](LICENSE).
 
 ## Credits
 
