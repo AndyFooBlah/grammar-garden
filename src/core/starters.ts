@@ -12,5 +12,6 @@ export const STARTERS: Starter[] = [
   { name: 'Bramble', dna: 'A=wf[lB][rB]wfA;B=gf[lgf][rgf]p', blurb: 'Woody trunk with pink flowering side shoots. Healthy.' },
   { name: 'Floppy', dna: 'A=gf[lB][rB]gfA;B=gfgfy', blurb: 'Same shape as Bramble but all green: snaps once it gets tall.' },
   { name: 'Candle', dna: 'A=wfwfB;B=[llgfy][rrgfy]gfB', blurb: 'A short woody stem with yellow flowers up a green spike.' },
+  { name: 'Bell', dna: 'A=wfwfB;B=[lllgfv][rrrgfv]wfB', blurb: 'A woody spike hung with violet bells. Beetles find these even in the rain.' },
   { name: 'Fan', dna: 'A=wf[lllB][llB][lB]B[rB][rrB][rrrB];B=gfgfp', blurb: 'One woody stem, a fan of pink-tipped green rays.' },
 ];

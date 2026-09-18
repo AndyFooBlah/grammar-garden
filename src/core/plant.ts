@@ -1,7 +1,7 @@
 /** Grow a DNA string into geometry and judge it. Pure: same inputs, same plant. */
 import { grow, parseDna, validateDna, type Rules } from './grammar';
 import { checkStructure, type Verdict } from './structure';
-import { countFlowers, interpret, type Geometry } from './turtle';
+import { countFlowers, interpret, type FlowerCounts, type Geometry } from './turtle';
 
 export interface GeometrySettings {
   turnAngle: number;
@@ -20,7 +20,7 @@ export interface GrownPlant {
   finished: boolean;
   geo: Geometry;
   verdict: Verdict;
-  flowers: { y: number; p: number };
+  flowers: FlowerCounts;
   /** Height above ground in pixels. */
   height: number;
 }

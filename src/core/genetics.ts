@@ -3,7 +3,7 @@ import { cleanSymbols, isVariable, VARIABLES, type Rules } from './grammar';
 import type { Rng } from './rng';
 
 /** Symbols a mutation may insert, weighted so plants mostly grow and turn. */
-const INSERT_POOL = 'ffffffbllllrrrrggwwwyypp+-';
+const INSERT_POOL = 'ffffffbllllrrrrggwwwyyppvv+-';
 
 /**
  * Child rules from two parents: shared variables are a coin flip, variables only
@@ -269,7 +269,7 @@ export function randomDna(rng: Rng): Rules {
       }
     }
     // Give every recipe a fair chance of a flower and of pointing forward.
-    if (!/[yp]/.test(body) && rng.chance(0.6)) body += rng.chance(0.5) ? 'y' : 'p';
+    if (!/[ypv]/.test(body) && rng.chance(0.6)) body += rng.pick(['y', 'p', 'v']);
     if (!body.includes('f')) body = 'f' + body;
     rules[name] = cleanSymbols(body);
   }

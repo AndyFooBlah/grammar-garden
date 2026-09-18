@@ -14,7 +14,7 @@ describe('World', () => {
     expect(w.plants.length).toBe(Math.round(w.settings.fieldWidth / 120));
     for (const st of STARTERS) expect(w.plants.some((p) => p.dna === st.dna)).toBe(true);
     expect(w.plants.every((p) => p.stage === 'seed')).toBe(true);
-    expect(w.bugs.length).toBe(w.settings.bees + w.settings.butterflies);
+    expect(w.bugs.length).toBe(w.settings.bees + w.settings.butterflies + w.settings.beetles);
   });
 
   it('only grows during rain in its own zone', () => {
@@ -72,10 +72,12 @@ describe('World', () => {
   it('bugs stay in the sunny zone when the other one rains', () => {
     const w = World.newGarden({ rainLeft: 0, rainRight: 1, cycleLength: 20 }, 9);
     run(w, 60);
-    for (const b of w.bugs) expect(w.zoneOf(b.x)).toBe(0);
+    for (const b of w.bugs) if (b.kind !== 'beetle') expect(w.zoneOf(b.x)).toBe(0);
     const both = World.newGarden({ rainLeft: 1, rainRight: 1, cycleLength: 20 }, 9);
     run(both, 60);
-    for (const b of both.bugs) expect(Math.abs(b.y)).toBeLessThanOrEqual(40);
+    for (const b of both.bugs) if (b.kind !== 'beetle') expect(Math.abs(b.y)).toBeLessThanOrEqual(40);
+    // Beetles keep working in the rain.
+    expect(both.stats.visits).toBeGreaterThan(0);
   });
 
   it('collapses Tangle and Floppy, keeps Bramble', () => {
@@ -176,5 +178,16 @@ describe('World', () => {
     expect(before).toBeLessThanOrEqual(200);
     w.updateSettings({ maxSymbols: 40 });
     for (const p of w.livePlants()) expect(w.geometry(p).str.length).toBeLessThanOrEqual(40);
+  });
+});
+
+describe('beetles', () => {
+  it('pollinate violet flowers in a zone where it never stops raining', () => {
+    const w = new World({ rainLeft: 1, rainRight: 1, cycleLength: 20, bees: 0, butterflies: 0, beetles: 3, maxPlants: 200 }, 21);
+    w.addSeed('A=wfwfB;B=[lllgfv][rrrgfv]wfB', { x: 1000 });
+    w.addSeed('A=wfwfB;B=[lllgfv][rrrgfv]wfB', { x: 1100 });
+    for (let i = 0; i < 300; i++) w.step();
+    expect(w.stats.visits).toBeGreaterThan(0);
+    expect(w.stats.born).toBeGreaterThan(0);
   });
 });

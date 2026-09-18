@@ -103,6 +103,26 @@ export class Sounds {
     lfo.stop(t + 0.4);
   }
 
+  /** A dry double click, like a beetle landing on a leaf. */
+  click(): void {
+    if (!this.ready) return;
+    const ctx = this.ctx!;
+    for (let i = 0; i < 2; i++) {
+      const t = ctx.currentTime + i * 0.07;
+      const src = ctx.createBufferSource();
+      src.buffer = this.noise();
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.value = 2400 - i * 600;
+      filter.Q.value = 6;
+      const gain = ctx.createGain();
+      this.env(gain, t, 0.1, 0.003, 0.035);
+      src.connect(filter).connect(gain).connect(this.master!);
+      src.start(t);
+      src.stop(t + 0.05);
+    }
+  }
+
   /** Two or three soft breathy puffs for a butterfly. */
   flutter(): void {
     if (!this.ready) return;

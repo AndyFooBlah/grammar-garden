@@ -85,6 +85,7 @@ function handleEvents(events: WorldEvent[]): void {
         break;
       case 'visit':
         if (e.kind === 'bee') sounds.buzz();
+        else if (e.kind === 'beetle') sounds.click();
         else sounds.flutter();
         break;
       case 'collapse':
@@ -264,7 +265,7 @@ function refreshStats(): void {
   let topGen = 0;
   for (const p of live) {
     const f = world.geometry(p).flowers;
-    flowers += f.y + f.p;
+    flowers += f.y + f.p + f.v;
     topGen = Math.max(topGen, p.generation);
   }
   $('st-plants').textContent = String(live.filter((p) => p.stage !== 'seed').length);
@@ -319,7 +320,7 @@ function refreshInspector(): void {
     energyBar.style.width = '0%';
     energyLabel.textContent = '';
     infoEl.innerHTML = `<dt>Recipe size</dt><dd>${grown.str.length} symbols after ${grown.steps} steps</dd>
-      <dt>Flowers</dt><dd>🟡 ${grown.flowers.y} · 🩷 ${grown.flowers.p}</dd>
+      <dt>Flowers</dt><dd>🟡 ${grown.flowers.y} · 🩷 ${grown.flowers.p} · 🟣 ${grown.flowers.v}</dd>
       <dt>Upkeep</dt><dd>${upkeep.toFixed(1)} energy per tick when fully grown</dd>
       <dt>Water</dt><dd>needs soil at least ${Math.round(need * 100)}% wet</dd>
       <dt>Tip</dt><dd>Click a plant in the garden to see its recipe, or write one here and plant it.</dd>`;
@@ -353,7 +354,7 @@ function refreshInspector(): void {
     <dt>Water</dt><dd>${waterWord}</dd>
     <dt>Age</dt><dd>${plant.age} of ${world.settings.lifespan} ticks</dd>
     <dt>Grown</dt><dd>${plant.steps} steps, ${grown.str.length} symbols</dd>
-    <dt>Flowers</dt><dd>🟡 ${grown.flowers.y} · 🩷 ${grown.flowers.p}</dd>
+    <dt>Flowers</dt><dd>🟡 ${grown.flowers.y} · 🩷 ${grown.flowers.p} · 🟣 ${grown.flowers.v}</dd>
     <dt>Parents</dt><dd>${parents}</dd>${mutated}`;
 }
 
@@ -665,6 +666,7 @@ const SPECS: Spec[] = [
   { key: 'lifespan', label: 'Plant lifespan', min: 20, max: 2000, step: 20, format: (v) => `${v} ticks` },
   { key: 'bees', label: 'Bees', min: 0, max: 8, step: 1 },
   { key: 'butterflies', label: 'Butterflies', min: 0, max: 8, step: 1 },
+  { key: 'beetles', label: 'Beetles', min: 0, max: 8, step: 1 },
   { key: 'maxPlants', label: 'Room for plants', min: 5, max: 300, step: 5 },
   { key: 'seedSpacing', label: 'Seed spacing', min: 2, max: 120, step: 2, format: (v) => `${v} px` },
   { key: 'seedSpread', label: 'Seed travel', min: 5, max: 600, step: 5, format: (v) => `${v} px` },

@@ -132,11 +132,11 @@ export function describePlant(grown: GrownPlant): string {
   const kind = classify(grown);
   if (kind === 'seed') return 'never grows';
   const words: string[] = [kind, grown.height < 60 ? 'short' : grown.height < 150 ? 'medium' : 'tall'];
-  const { y, p } = grown.flowers;
-  if (y + p === 0) words.push('no flowers');
+  const { y, p, v } = grown.flowers;
+  if (y + p + v === 0) words.push('no flowers');
   else {
-    const kinds = (y ? '🟡' : '') + (p ? '🩷' : '');
-    words.push(`${kinds} ${y + p >= 8 ? 'many' : 'few'}`);
+    const kinds = (y ? '🟡' : '') + (p ? '🩷' : '') + (v ? '🟣' : '');
+    words.push(`${kinds} ${y + p + v >= 8 ? 'many' : 'few'}`);
   }
   return words.join(' · ');
 }

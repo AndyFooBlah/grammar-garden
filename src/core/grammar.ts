@@ -7,10 +7,10 @@
  *   + -  double / halve the step size
  *   [ ]  start / end a branch (save / restore the turtle state)
  *   g w  pen colour: green (leafy) / wood (brown)
- *   y p  place a yellow / pink flower here
+ *   y p v  place a yellow / pink / violet flower here
  */
 
-export const COMMANDS = 'fblr+-[]gwyp';
+export const COMMANDS = 'fblr+-[]gwypv';
 export const VARIABLES = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
 /** Variable name -> replacement string. */

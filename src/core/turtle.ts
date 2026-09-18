@@ -5,7 +5,7 @@
  */
 
 export type Pen = 'g' | 'w';
-export type FlowerKind = 'y' | 'p';
+export type FlowerKind = 'y' | 'p' | 'v';
 
 export interface Segment {
   x1: number;
@@ -102,6 +102,7 @@ export function interpret(str: string, turnAngleDeg: number, stepPx: number): Ge
         break;
       case 'y':
       case 'p':
+      case 'v':
         flowers.push({ x: t.x, y: t.y, kind: c, seg: t.seg });
         break;
       default:
@@ -112,12 +113,14 @@ export function interpret(str: string, turnAngleDeg: number, stepPx: number): Ge
   return { segs, flowers, minX, maxX, minY, maxY };
 }
 
-export function countFlowers(geo: Geometry): { y: number; p: number } {
-  let y = 0;
-  let p = 0;
-  for (const f of geo.flowers) {
-    if (f.kind === 'y') y++;
-    else p++;
-  }
-  return { y, p };
+export interface FlowerCounts {
+  y: number;
+  p: number;
+  v: number;
+}
+
+export function countFlowers(geo: Geometry): FlowerCounts {
+  const c: FlowerCounts = { y: 0, p: 0, v: 0 };
+  for (const f of geo.flowers) c[f.kind]++;
+  return c;
 }

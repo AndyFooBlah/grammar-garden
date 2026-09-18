@@ -6,6 +6,7 @@ import { crossover, mutate, randomDna } from './genetics';
 import { formatDna, parseDna } from './grammar';
 import { computeLight, type LightMap } from './light';
 import { randomName } from './names';
+import type { FlowerKind } from './turtle';
 import { classify, emptyCounts, KINDS, type Kind } from './phenotype';
 import { growPlant, type GrownPlant } from './plant';
 import { Rng } from './rng';
@@ -27,6 +28,8 @@ export interface Settings {
   thirstDamage: number;
   lifespan: number;
   bees: number;
+  /** Beetles visit violet flowers and work in any weather, but fly slowly. */
+  beetles: number;
   butterflies: number;
   maxPlants: number;
   seedSpacing: number;
@@ -69,6 +72,7 @@ export const DEFAULT_SETTINGS: Settings = {
   thirstDamage: 6,
   lifespan: 400,
   bees: 4,
+  beetles: 3,
   butterflies: 4,
   maxPlants: 120,
   seedSpacing: 6,
@@ -163,7 +167,15 @@ export interface LineageRecord {
   fate?: DeathReason | 'removed';
 }
 
-export type BugKind = 'bee' | 'butterfly';
+export type BugKind = 'bee' | 'butterfly' | 'beetle';
+
+export const BUG_KINDS: BugKind[] = ['bee', 'butterfly', 'beetle'];
+
+/** Which flower colour each bug visits. */
+export const FLOWER_OF: Record<BugKind, FlowerKind> = { bee: 'y', butterfly: 'p', beetle: 'v' };
+
+/** Beetles are slow fliers. */
+const BEETLE_SPEED = 0.5;
 
 export interface Pollen {
   plantId: number;
@@ -325,7 +337,7 @@ export class World {
       if (seg.pen === 'w') wood++;
       else green++;
     }
-    const flowers = grown.flowers.y + grown.flowers.p;
+    const flowers = grown.flowers.y + grown.flowers.p + grown.flowers.v;
     return Math.min(1, this.settings.waterScale * (green + 2 * flowers + 0.1 * wood));
   }
 
@@ -635,7 +647,7 @@ export class World {
       if (seg.pen === 'w') wood++;
       else green++;
     }
-    const flowers = grown.flowers.y + grown.flowers.p;
+    const flowers = grown.flowers.y + grown.flowers.p + grown.flowers.v;
     const oldAge = age > s.lifespan ? OLD_AGE_DRAIN + OLD_AGE_RAMP * (age - s.lifespan) : 0;
     return s.baseUpkeep + wood * s.woodUpkeep + green * s.greenUpkeep + flowers * s.flowerUpkeep + oldAge;
   }
@@ -673,13 +685,19 @@ export class World {
   // ---------- bugs ----------
 
   private shelter(kind: BugKind): { x: number; y: number } {
-    return { x: kind === 'bee' ? 30 : this.settings.fieldWidth - 30, y: -SKY_BOTTOM };
+    const x = kind === 'bee' ? 30 : kind === 'butterfly' ? this.settings.fieldWidth - 30 : this.settings.fieldWidth / 2;
+    return { x, y: -SKY_BOTTOM };
+  }
+
+  /** Zones a bug can work in right now: beetles anywhere, the others only where the sun is out. */
+  private workingZones(bug: Bug, sunny: number[]): number[] {
+    return bug.kind === 'beetle' ? this.zones.map((_, i) => i) : sunny;
   }
 
   /** Make the bug population match the settings. */
   private syncBugs(): void {
-    for (const kind of ['bee', 'butterfly'] as BugKind[]) {
-      const want = kind === 'bee' ? this.settings.bees : this.settings.butterflies;
+    for (const kind of BUG_KINDS) {
+      const want = kind === 'bee' ? this.settings.bees : kind === 'butterfly' ? this.settings.butterflies : this.settings.beetles;
       const have = this.bugs.filter((b) => b.kind === kind);
       for (let i = have.length; i < want; i++) {
         const s = this.shelter(kind);
@@ -703,46 +721,50 @@ export class World {
   }
 
   /** A random point in the sky over a sunny zone, usually the one where the sun came out last. */
-  private randomSkyPoint(sunny: number[], _bug: Bug): { x: number; y: number } {
+  private randomSkyPoint(zones: number[], bug: Bug): { x: number; y: number } {
     const half = this.settings.fieldWidth / 2;
-    const zone = this.rng.chance(0.8) ? this.freshestSunnyZone(sunny) : this.rng.pick(sunny);
+    const zone = this.rng.chance(0.8) ? this.freshestSunnyZone(zones) : this.rng.pick(zones);
+    // Beetles stay low.
+    const top = bug.kind === 'beetle' ? this.settings.skyHeight / 2 : this.settings.skyHeight;
     return {
       x: this.rng.range(zone * half + EDGE_MARGIN, (zone + 1) * half - EDGE_MARGIN),
-      y: -this.rng.range(SKY_BOTTOM, this.settings.skyHeight),
+      y: -this.rng.range(SKY_BOTTOM, top),
     };
   }
 
   /** Plants in sunny zones with flowers of the bug's colour, weighted by flower count, favouring the freshest sunshine. */
-  private chooseFlowerPlant(bug: Bug, sunny: number[]): Plant | null {
-    const kind = bug.kind === 'bee' ? 'y' : 'p';
-    const fresh = this.freshestSunnyZone(sunny);
-    const candidates = this.livePlants().filter((p) => p.stage !== 'seed' && sunny.includes(this.zoneOf(p.x)));
+  private chooseFlowerPlant(bug: Bug, zones: number[]): Plant | null {
+    const kind = FLOWER_OF[bug.kind];
+    const fresh = this.freshestSunnyZone(zones);
+    const candidates = this.livePlants().filter((p) => p.stage !== 'seed' && zones.includes(this.zoneOf(p.x)));
     const weights = candidates.map((p) => this.geometry(p).flowers[kind] * (this.zoneOf(p.x) === fresh ? 4 : 1));
     const i = this.rng.weighted(weights);
     return i < 0 ? null : candidates[i];
   }
 
   private moveTowards(bug: Bug, tx: number, ty: number): boolean {
+    const speed = this.settings.bugSpeed * (bug.kind === 'beetle' ? BEETLE_SPEED : 1);
     const dx = tx - bug.x;
     const dy = ty - bug.y;
     const dist = Math.hypot(dx, dy);
-    if (dist <= this.settings.bugSpeed) {
+    if (dist <= speed) {
       bug.x = tx;
       bug.y = ty;
       return true;
     }
-    bug.x += (dx / dist) * this.settings.bugSpeed;
-    bug.y += (dy / dist) * this.settings.bugSpeed;
+    bug.x += (dx / dist) * speed;
+    bug.y += (dy / dist) * speed;
     return false;
   }
 
   private moveBugs(events: WorldEvent[]): void {
-    const sunny = this.sunnyZones();
+    const sunnyNow = this.sunnyZones();
     for (const bug of this.bugs) {
       bug.px = bug.x;
       bug.py = bug.y;
+      const sunny = this.workingZones(bug, sunnyNow);
       if (sunny.length === 0) {
-        // Rain everywhere: hide at the edge of the field.
+        // Rain everywhere: bees and butterflies hide at the edge of the field.
         const s = this.shelter(bug.kind);
         bug.targetPlant = null;
         this.moveTowards(bug, s.x, s.y);
@@ -755,7 +777,7 @@ export class World {
       if (bug.targetPlant !== null) {
         const plant = this.plantById(bug.targetPlant);
         const grown = plant && plant.stage !== 'dying' && sunny.includes(this.zoneOf(plant.x)) ? this.geometry(plant) : null;
-        const kind = bug.kind === 'bee' ? 'y' : 'p';
+        const kind = FLOWER_OF[bug.kind];
         const flowers = grown ? grown.geo.flowers.filter((f) => f.kind === kind) : [];
         if (!plant || !grown || flowers.length === 0) {
           bug.targetPlant = null;

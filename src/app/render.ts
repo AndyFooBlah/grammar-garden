@@ -7,6 +7,9 @@ export const COLORS = {
   wood: '#7a4e2d',
   sun: '#f0bd2c',
   pink: '#ee6ea8',
+  violet: '#7b5cd6',
+  beetle: '#2f3a2a',
+  beetleShine: '#5f8a4a',
   dirt: '#d9b98a',
   dirtDry: '#e6d2a8',
   dirtWet: '#8e6236',
@@ -252,7 +255,7 @@ export function drawPlant(ctx: CanvasRenderingContext2D, grown: GrownPlant, line
     ctx.stroke();
   }
   for (const f of flowers) {
-    ctx.fillStyle = f.kind === 'y' ? COLORS.sun : COLORS.pink;
+    ctx.fillStyle = f.kind === 'y' ? COLORS.sun : f.kind === 'p' ? COLORS.pink : COLORS.violet;
     ctx.beginPath();
     ctx.arc(f.x, f.y, flowerRadius, 0, Math.PI * 2);
     ctx.fill();
@@ -326,7 +329,35 @@ function drawBug(ctx: CanvasRenderingContext2D, bug: Bug, view: View, frame: Fie
     ctx.fill();
   }
   const flap = Math.abs(Math.sin(frame.time / 60 + bug.id));
-  if (bug.kind === 'bee') {
+  if (bug.kind === 'beetle') {
+    // A dark oval with a green sheen and a split down the wing cases; wings peek out while flying.
+    const moving = Math.hypot(bug.x - bug.px, bug.y - bug.py) > 0.5;
+    if (moving) {
+      ctx.fillStyle = COLORS.wing;
+      ctx.beginPath();
+      ctx.ellipse(-2, -7, 6, 2.5 + flap * 2, -0.5, 0, Math.PI * 2);
+      ctx.ellipse(2, -7, 6, 2.5 + flap * 2, 0.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.fillStyle = COLORS.beetle;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 9, 6, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = COLORS.beetleShine;
+    ctx.beginPath();
+    ctx.ellipse(-2, -2, 4, 2, -0.3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = COLORS.beetleShine;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(-3, -6);
+    ctx.lineTo(-3, 6);
+    ctx.stroke();
+    ctx.fillStyle = COLORS.beeStripe;
+    ctx.beginPath();
+    ctx.arc(8, 0, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (bug.kind === 'bee') {
     ctx.fillStyle = COLORS.wing;
     ctx.beginPath();
     ctx.ellipse(-1, -6, 5, 3 + flap * 3, -0.4, 0, Math.PI * 2);
@@ -405,7 +436,7 @@ function drawMinimap(ctx: CanvasRenderingContext2D, world: World, view: View): v
   for (const p of world.plants) {
     const g = world.geometry(p);
     const h = Math.min(r.h - 8, 2 + (g.height / 300) * (r.h - 8));
-    ctx.fillStyle = g.flowers.y + g.flowers.p > 0 ? COLORS.pink : COLORS.leaf;
+    ctx.fillStyle = g.flowers.y + g.flowers.p + g.flowers.v > 0 ? COLORS.pink : COLORS.leaf;
     ctx.fillRect(mx(p.x) - 0.5, r.y + r.h - 6 - h, 1.5, h);
   }
   ctx.strokeStyle = COLORS.minimapView;
