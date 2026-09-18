@@ -546,6 +546,7 @@ replayPlay.addEventListener('click', () => {
 $('replay-live').addEventListener('click', leaveReplay);
 replayEl.addEventListener('toggle', () => {
   if (replayEl.open) {
+    if (replay) return; // already showing a frame: leave the scrubber where it is
     const n = world.recording.frames.length;
     replayPos.max = String(Math.max(0, n - 1));
     replayPos.value = String(Math.max(0, n - 1));
