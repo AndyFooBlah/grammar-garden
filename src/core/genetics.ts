@@ -231,15 +231,47 @@ export function mutateGenome(rules: Rules, rng: Rng): { rules: Rules; kind: Geno
  * a duplicated rule, an unused rule dropped, or a chunk moved between rules.
  * Returns the names of rules that changed.
  */
-export function mutate(rules: Rules, rate: number, rng: Rng): { rules: Rules; mutated: string[] } {
+const EDIT_WORDS: Record<MutationKind, string> = {
+  insert: 'gained a symbol',
+  delete: 'lost a symbol',
+  replace: 'changed a symbol',
+  duplicate: 'doubled a chunk',
+  branch: 'grew a new branch',
+  swapvar: 'now points at a different rule',
+};
+
+function genomeWords(kind: GenomeEvent, touched: string[]): string {
+  switch (kind) {
+    case 'newrule':
+      return `new letter ${touched[0]} invented and plugged into ${touched[1]}`;
+    case 'copyrule':
+      return `gene duplication: ${touched[0]} copied from a rule and wired into ${touched[1]}`;
+    case 'droprule':
+      return `dropped unused rule ${touched[0]}`;
+    case 'transpose':
+      return `moved a chunk from ${touched[0]} to ${touched[1]}`;
+  }
+}
+
+export interface MutationResult {
+  rules: Rules;
+  /** Names of rules that changed (new ones included). */
+  mutated: string[];
+  /** Plain-words description of each event, for the inspector and family tree. */
+  events: string[];
+}
+
+export function mutate(rules: Rules, rate: number, rng: Rng): MutationResult {
   let out: Rules = {};
   const mutated = new Set<string>();
+  const events: string[] = [];
   const variables = Object.keys(rules);
   for (const name of variables) {
     if (rng.chance(rate)) {
-      const { body } = mutateRule(rules[name], rng, variables);
+      const { body, kind } = mutateRule(rules[name], rng, variables);
       out[name] = cleanSymbols(body);
       mutated.add(name);
+      events.push(`rule ${name} ${EDIT_WORDS[kind]}`);
     } else {
       out[name] = rules[name];
     }
@@ -247,10 +279,13 @@ export function mutate(rules: Rules, rate: number, rng: Rng): { rules: Rules; mu
   if (rng.chance(rate / 2)) {
     const g = mutateGenome(out, rng);
     out = g.rules;
-    for (const n of g.touched) mutated.add(n);
+    if (g.touched.length) {
+      for (const n of g.touched) mutated.add(n);
+      events.push(genomeWords(g.kind, g.touched));
+    }
   }
   for (const n of Object.keys(out)) out[n] = cleanSymbols(out[n]);
-  return { rules: out, mutated: [...mutated].filter((n) => n in out) };
+  return { rules: out, mutated: [...mutated].filter((n) => n in out), events };
 }
 
 /** A random recipe that usually grows into something. */

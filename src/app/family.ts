@@ -116,7 +116,8 @@ export function openFamilyTree(world: World, plantId: number, cb: FamilyCallback
 
   function showDetail(r: LineageRecord): void {
     const rules = parseDna(r.dna);
-    const mutated = r.mutated.length ? `<div class="mut">✨ Mutated when born: rule${r.mutated.length > 1 ? 's' : ''} ${r.mutated.join(', ')}</div>` : '';
+    const events = r.events?.length ? r.events : r.mutated.length ? [`rule${r.mutated.length > 1 ? 's' : ''} ${r.mutated.join(', ')} changed`] : [];
+    const mutated = events.length ? `<div class="mut">✨ When born: ${events.join('; ')}</div>` : '';
     const parents = r.parents.length ? r.parents.map((p) => p.name).join(' + ') : 'none';
     const alive = !!world.plantById(r.id);
     detail.innerHTML = `<h3>${r.name} <span class="muted">gen ${r.generation}</span></h3>

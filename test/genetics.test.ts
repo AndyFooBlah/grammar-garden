@@ -43,7 +43,7 @@ describe('mutateRule', () => {
 describe('mutate', () => {
   it('leaves rules alone at rate 0 and changes them at rate 1', () => {
     const rules = parseDna('A=fB;B=fy');
-    expect(mutate(rules, 0, new Rng(1))).toEqual({ rules, mutated: [] });
+    expect(mutate(rules, 0, new Rng(1))).toEqual({ rules, mutated: [], events: [] });
     const m = mutate(rules, 1, new Rng(1));
     expect(m.mutated).toEqual(expect.arrayContaining(['A', 'B']));
   });

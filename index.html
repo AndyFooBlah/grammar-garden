@@ -70,6 +70,7 @@
             <button id="btn-plant">🌱 Plant new seed</button>
             <button id="btn-surprise">🎲 Surprise me</button>
             <button id="btn-family">🌳 Family tree</button>
+            <button id="btn-share" title="Copy a link to this recipe">🔗 Share</button>
             <button id="btn-remove" class="danger">✕ Remove</button>
           </div>
         </section>
@@ -79,6 +80,20 @@
           <p class="muted">Grass, herbs, bushes, shrubs and trees, sorted by height, width and how woody they are. The chart shows the mix over time.</p>
           <canvas id="kinds-chart"></canvas>
           <div id="kinds-legend" class="kinds-legend"></div>
+        </details>
+
+        <details class="card" id="replay">
+          <summary><h2>⏪ Replay</h2></summary>
+          <p class="muted">Scrub back through the last few thousand ticks and watch the garden change. The live garden pauses while you look.</p>
+          <div class="btn-row">
+            <button id="replay-play" class="big">▶ Play</button>
+            <button id="replay-live" class="big">⏹ Back to live</button>
+          </div>
+          <label class="slider replay-slider">
+            <span id="replay-label">tick 0</span>
+            <input id="replay-pos" type="range" min="0" max="0" step="1" value="0" />
+            <output id="replay-of"></output>
+          </label>
         </details>
 
         <details class="card" id="population">
@@ -112,6 +127,8 @@
         <details class="card" id="settings">
           <summary><h2>⚙️ World settings</h2></summary>
           <div id="settings-body"></div>
+          <h3>Climate presets</h3>
+          <div id="presets" class="btn-row"></div>
           <label class="check"><input id="selfing" type="checkbox" /> Bugs can pollinate a plant with itself</label>
           <label class="slider"><span>Field width</span><input id="world-width" type="range" min="1200" max="12000" step="400" value="3600" /><output id="world-width-out">3600 px</output></label>
           <p class="muted">Field width applies when you start a new garden. Drag or scroll the field to move around, pinch or ctrl+scroll to zoom.</p>

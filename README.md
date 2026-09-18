@@ -29,6 +29,10 @@ The full game design, kept current with the code, is in [DESIGN.md](DESIGN.md).
   chart shows the mix over time.
 - Tune the world: two climate zones with their own rain, soil that soaks and
   dries, sunlight strength, upkeep costs, mutation rate, bug counts and more.
+- **Replay** the last few thousand ticks with a scrubber and watch the mix of
+  plants change.
+- Share a recipe as a link, or try a climate preset: two deserts, two
+  rainforests, free flowers, weak stems.
 - Pan and zoom around a wide field; save the whole garden to a JSON file and
   load it later. The game also autosaves in the browser.
 
@@ -44,7 +48,7 @@ replaced by its rule. Lower-case letters drive a pen:
 | `+` / `-` | double / halve the step size |
 | `[` / `]` | start a branch / return to where it started |
 | `g` / `w` | green pen (leafy, catches light) / wood pen (strong, blocks light) |
-| `y` / `p` | a yellow flower (bees) / a pink flower (butterflies) |
+| `y` / `p` / `v` | a yellow flower (bees) / a pink flower (butterflies) / a violet flower (beetles, who don't mind rain) |
 
 For example `A=wf[lB][rB]wfA;B=gf[lgf][rgf]p` is a woody trunk with pink
 flowering side shoots. A plant collapses if its lines cross, if a green stem
@@ -59,6 +63,15 @@ npm test         # unit tests (vitest)
 npm run build    # typecheck + production build into dist/
 ```
 
+```bash
+npm run sim -- --seeds 5 --ticks 3000 --set rainLeft=0.3   # headless balance run
+```
+
+The harness (`scripts/sim.ts`) runs gardens without a browser and reports
+population per climate, deaths by cause, families, kinds and more, so a balance
+change can be judged before it ships. `--csv out.csv` writes per-sample rows;
+`--recipes` lists the winning recipes.
+
 No backend and no cloud services: the game is static files. Pushing to `main`
 runs the tests and deploys to GitHub Pages through the workflow in
 `.github/workflows/deploy.yml`.
@@ -68,8 +81,9 @@ runs the tests and deploys to GitHub Pages through the workflow in
 - `src/core/` — the simulation, framework-free and unit-tested: `grammar`
   (rules and growth), `turtle` (drawing), `structure` (collapse checks),
   `light` (sunlight and shade), `genetics` (crossover and mutation),
-  `families` (grouping similar recipes), `world` (plants, bugs, climate, soil,
-  save/load).
+  `families` (grouping similar recipes), `phenotype` (grass to tree), `world`
+  (plants, bugs, climate, soil, replay frames, save/load).
+- `scripts/sim.ts` — the headless balance harness (`npm run sim`).
 - `src/app/` — the browser app: `render` (canvas and camera), `audio`
   (synthesized sounds), `family` (the family tree overlay), `main` (UI wiring).
 - `test/` — vitest suites for the core.

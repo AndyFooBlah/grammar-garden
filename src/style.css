@@ -697,3 +697,21 @@ code {
   min-width: 1.6em;
   text-align: right;
 }
+
+/* replay */
+.replay-slider {
+  grid-template-columns: 6em 1fr 5.5em;
+}
+
+#replay[open] summary h2 {
+  color: var(--accent);
+}
+
+body.replaying #field {
+  outline: 3px solid var(--sun);
+  outline-offset: -3px;
+}
+
+#presets button {
+  font-size: 0.85rem;
+}

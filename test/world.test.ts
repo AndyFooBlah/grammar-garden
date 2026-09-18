@@ -191,3 +191,33 @@ describe('beetles', () => {
     expect(w.stats.born).toBeGreaterThan(0);
   });
 });
+
+describe('recording and replay', () => {
+  it('records a frame per history sample and rebuilds a drawable world from it', () => {
+    const w = World.newGarden({}, 3);
+    for (let i = 0; i < 50; i++) w.step();
+    expect(w.recording.frames.length).toBe(w.history.length);
+    const frame = w.recording.frames[w.recording.frames.length - 1];
+    expect(frame.tick).toBe(50);
+    expect(frame.plants.length).toBe(w.livePlants().length);
+    const replay = World.fromFrame(frame, w.recording.dnas, w.settings);
+    expect(replay.plants.length).toBe(frame.plants.length);
+    expect(replay.light).not.toBeNull();
+    for (const p of replay.plants) expect(replay.geometry(p).str.length).toBeGreaterThan(0);
+    const copy = World.fromJSON(JSON.parse(JSON.stringify(w.toJSON())));
+    expect(copy.recording.frames.length).toBe(w.recording.frames.length);
+    // DNA table keeps growing consistently after a load.
+    for (let i = 0; i < 10; i++) copy.step();
+    const last = copy.recording.frames[copy.recording.frames.length - 1];
+    for (const [, , dna] of last.plants) expect(copy.recording.dnas[dna]).toBeDefined();
+  });
+
+  it('describes mutation events on children', () => {
+    const w = World.newGarden({ maxPlants: 60, mutationRate: 1 }, 4);
+    for (let i = 0; i < 400; i++) w.step();
+    const child = w.plants.find((p) => p.parents.length === 2 && (p.events?.length ?? 0) > 0);
+    expect(child).toBeDefined();
+    expect(w.lineage.get(child!.id)?.events).toEqual(child!.events);
+    expect(child!.events![0]).toMatch(/rule [A-Z]|new letter|gene duplication|dropped|moved/);
+  });
+});

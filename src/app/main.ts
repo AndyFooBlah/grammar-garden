@@ -33,6 +33,8 @@ let cam: Camera = { x: 0, zoom: 0 };
 /** While true the view keeps fitting the whole field, even when the window is resized. */
 let fitMode = true;
 const families = new FamilyTracker();
+/** While set, the field shows this rebuilt frame instead of the live garden. */
+let replay: { index: number; world: World; playing: boolean; acc: number } | null = null;
 
 // ---------- elements ----------
 
@@ -194,6 +196,19 @@ function drawKindsChart(): void {
     ctx.fill();
     rows.forEach((r, i) => (base[i] += r[ki]));
   });
+  if (replay) {
+    // Where the replay cursor sits on the chart; frames and history samples are taken together.
+    const offset = world.recording.frames.length - rows.length;
+    const i = replay.index - offset;
+    if (i >= 0 && i < rows.length) {
+      ctx.strokeStyle = '#22301f';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(x(i), pad.t);
+      ctx.lineTo(x(i), h - pad.b);
+      ctx.stroke();
+    }
+  }
   ctx.fillStyle = '#5a6a55';
   ctx.font = '11px Nunito, sans-serif';
   ctx.textAlign = 'left';
@@ -207,7 +222,21 @@ function frame(now: number): void {
   const dt = Math.min(now - last, 250);
   last = now;
   const tickMs = world.settings.tickMs;
-  if (!paused) {
+  if (replay) {
+    if (replay.playing) {
+      // One frame per fifth of a tick at the current speed, so a long run replays in a minute or two.
+      replay.acc += dt;
+      const frameMs = Math.max(40, tickMs / 5);
+      while (replay.acc >= frameMs) {
+        replay.acc -= frameMs;
+        if (replay.index >= world.recording.frames.length - 1) {
+          setReplayPlaying(false);
+          break;
+        }
+        showFrame(replay.index + 1);
+      }
+    }
+  } else if (!paused) {
     acc += dt;
     while (acc >= tickMs) {
       acc -= tickMs;
@@ -215,7 +244,7 @@ function frame(now: number): void {
     }
   }
   const view = currentView();
-  drawField(fieldCtx, world, view, { t: Math.min(1, acc / tickMs), time: now, selectedId });
+  drawField(fieldCtx, replay ? replay.world : world, view, { t: replay ? 1 : Math.min(1, acc / tickMs), time: now, selectedId: replay ? null : selectedId });
   requestAnimationFrame(frame);
 }
 
@@ -346,7 +375,8 @@ function refreshInspector(): void {
   const parents = plant.parents.length
     ? plant.parents.map((r) => `<button class="link" data-select="${r.id}">${r.name}</button>`).join(' + ')
     : 'none, a starter seed';
-  const mutated = plant.mutated.length ? `<dt>Mutated</dt><dd class="mut">✨ rule${plant.mutated.length > 1 ? 's' : ''} ${plant.mutated.join(', ')}</dd>` : '';
+  const eventWords = plant.events?.length ? plant.events.join('; ') : plant.mutated.length ? `rule${plant.mutated.length > 1 ? 's' : ''} ${plant.mutated.join(', ')} changed` : '';
+  const mutated = eventWords ? `<dt>Mutated</dt><dd class="mut">✨ ${eventWords}</dd>` : '';
   const sunWord = plant.stage === 'seed' ? 'none yet, seeds have no green' : `+${plant.sun.toFixed(1)} sunlight, −${plant.upkeep.toFixed(1)} upkeep`;
   infoEl.innerHTML = `<dt>Status</dt><dd>${stageWords[plant.stage]} · ${zoneName} climate</dd>
     <dt>Kind</dt><dd>${classify(grown)}</dd>
@@ -425,6 +455,105 @@ btnRemove.addEventListener('click', () => {
   world.removePlant(plant.id);
   select(null);
   refreshStats();
+});
+
+// ---------- share links ----------
+
+/** A link that opens the game with this recipe in the seed designer. */
+function recipeLink(dna: string): string {
+  return `${location.origin}${location.pathname}#recipe=${encodeURIComponent(formatDna(parseDna(dna)))}`;
+}
+
+$('btn-share').addEventListener('click', async () => {
+  const rules = parseDna(dnaBox.value);
+  if (!rules.A) return toast('Write a recipe with a rule for A first');
+  const link = recipeLink(dnaBox.value);
+  try {
+    await navigator.clipboard.writeText(link);
+    toast('Link copied. Anyone who opens it gets this recipe.');
+  } catch {
+    prompt('Copy this link:', link);
+  }
+});
+
+/** A recipe in the URL hash goes straight into the seed designer. */
+function loadRecipeFromHash(): boolean {
+  const m = location.hash.match(/^#recipe=(.+)$/);
+  if (!m) return false;
+  const dna = decodeURIComponent(m[1]);
+  if (!parseDna(dna).A) return false;
+  select(null);
+  setEditor(dna);
+  editorDirty = true;
+  history.replaceState(null, '', location.pathname + location.search);
+  return true;
+}
+
+// ---------- replay ----------
+
+const replayEl = $<HTMLDetailsElement>('replay');
+const replayPos = $<HTMLInputElement>('replay-pos');
+const replayLabel = $('replay-label');
+const replayOf = $<HTMLOutputElement>('replay-of');
+const replayPlay = $<HTMLButtonElement>('replay-play');
+
+function showFrame(index: number): void {
+  const frames = world.recording.frames;
+  if (!frames.length) return;
+  index = Math.max(0, Math.min(frames.length - 1, index));
+  const frameWorld = World.fromFrame(frames[index], world.recording.dnas, world.settings);
+  if (replay) {
+    replay.index = index;
+    replay.world = frameWorld;
+  } else {
+    replay = { index, world: frameWorld, playing: false, acc: 0 };
+    setPaused(true);
+    document.body.classList.add('replaying');
+  }
+  replayPos.max = String(frames.length - 1);
+  replayPos.value = String(index);
+  replayLabel.textContent = `tick ${frames[index].tick}`;
+  replayOf.value = `of ${world.tick}`;
+  refreshKinds();
+}
+
+function setReplayPlaying(on: boolean): void {
+  if (!replay) return;
+  replay.playing = on;
+  replay.acc = 0;
+  replayPlay.textContent = on ? '⏸ Pause' : '▶ Play';
+}
+
+function leaveReplay(): void {
+  if (!replay) return;
+  replay = null;
+  document.body.classList.remove('replaying');
+  replayPlay.textContent = '▶ Play';
+  replayOf.value = '';
+  replayLabel.textContent = `tick ${world.tick}`;
+  refreshKinds();
+}
+
+replayPos.addEventListener('input', () => {
+  showFrame(Number(replayPos.value));
+  setReplayPlaying(false);
+});
+replayPlay.addEventListener('click', () => {
+  if (!replay) showFrame(0);
+  else if (!replay.playing && replay.index >= world.recording.frames.length - 1) showFrame(0);
+  setReplayPlaying(!replay!.playing);
+});
+$('replay-live').addEventListener('click', leaveReplay);
+replayEl.addEventListener('toggle', () => {
+  if (replayEl.open) {
+    const n = world.recording.frames.length;
+    replayPos.max = String(Math.max(0, n - 1));
+    replayPos.value = String(Math.max(0, n - 1));
+    replayLabel.textContent = `tick ${world.tick}`;
+    replayOf.value = n ? `${n} frames` : 'nothing yet';
+  } else {
+    leaveReplay();
+  }
 });
 
 // ---------- family tree ----------
@@ -538,6 +667,12 @@ fieldCanvas.addEventListener('pointerdown', (e) => {
   const pt = canvasPoint(e);
   const view = currentView();
   const mm = minimapRect(view);
+  if (replay && !(pt.x >= mm.x && pt.x <= mm.x + mm.w && pt.y >= mm.y && pt.y <= mm.y + mm.h)) {
+    // Replay is for looking: allow panning but no selection.
+    drag = { startX: pt.x, lastX: pt.x, moved: true, pointerId: e.pointerId };
+    fieldCanvas.setPointerCapture(e.pointerId);
+    return;
+  }
   if (!showsWholeField(view, world) && pt.x >= mm.x && pt.x <= mm.x + mm.w && pt.y >= mm.y && pt.y <= mm.y + mm.h) {
     // Jump the view to where the minimap was clicked.
     fitMode = false;
@@ -596,6 +731,7 @@ $('btn-zoom-fit').addEventListener('click', zoomFit);
 // ---------- controls ----------
 
 function setPaused(p: boolean): void {
+  if (!p && replay) leaveReplay();
   paused = p;
   btnPlay.textContent = paused ? '▶ Play' : '⏸ Pause';
 }
@@ -731,6 +867,34 @@ function syncSettingsUi(): void {
   syncSpeedUi();
 }
 
+/** One-click climates and what-if experiments. Each applies a few settings on top of the current ones. */
+const PRESETS: { name: string; blurb: string; set: Partial<Settings> }[] = [
+  { name: 'Desert & rainforest', blurb: 'The default: 10% rain on the left, 80% on the right.', set: { rainLeft: 0.1, rainRight: 0.8, flowerUpkeep: DEFAULT_SETTINGS.flowerUpkeep, maxLoad: DEFAULT_SETTINGS.maxLoad, thirstDamage: DEFAULT_SETTINGS.thirstDamage } },
+  { name: 'Temperate', blurb: 'Both sides 40% rain. A fair fight.', set: { rainLeft: 0.4, rainRight: 0.4 } },
+  { name: 'Two deserts', blurb: '15% rain everywhere. Who can live on almost nothing?', set: { rainLeft: 0.15, rainRight: 0.15 } },
+  { name: 'Two rainforests', blurb: '80% rain everywhere. Light is scarce, beetles rule.', set: { rainLeft: 0.8, rainRight: 0.8 } },
+  { name: 'Free flowers', blurb: 'Flowers cost no energy. Watch what evolution does with a free lunch.', set: { flowerUpkeep: 0 } },
+  { name: 'Weak stems', blurb: 'Green stems snap at half the load. Wood or bust.', set: { maxLoad: 6 } },
+  { name: 'No thirst', blurb: 'Dry soil does no harm. Does the desert fill up?', set: { thirstDamage: 0 } },
+];
+
+function buildPresets(): void {
+  const wrap = $('presets');
+  for (const p of PRESETS) {
+    const b = document.createElement('button');
+    b.textContent = p.name;
+    b.title = p.blurb;
+    b.addEventListener('click', () => {
+      handleEvents(world.updateSettings(p.set));
+      syncSettingsUi();
+      refreshStats();
+      refreshInspector();
+      toast(`${p.name}: ${p.blurb}`);
+    });
+    wrap.append(b);
+  }
+}
+
 const worldWidth = $<HTMLInputElement>('world-width');
 worldWidth.addEventListener('input', () => ($('world-width-out') as HTMLOutputElement).value = `${worldWidth.value} px`);
 
@@ -756,6 +920,7 @@ function buildStarters(): void {
 // ---------- save / load / new ----------
 
 function replaceWorld(next: World): void {
+  leaveReplay();
   world = next;
   selectedId = null;
   editorDirty = false;
@@ -826,9 +991,16 @@ document.addEventListener('keydown', unlock, { capture: true });
 
 buildSettings();
 buildStarters();
+buildPresets();
 syncSpeedUi();
 if (!world.plants.length) world = World.newGarden();
-setEditor(STARTERS[3].dna);
+if (!loadRecipeFromHash()) setEditor(STARTERS[3].dna);
+window.addEventListener('hashchange', () => {
+  if (loadRecipeFromHash()) {
+    refreshInspector();
+    toast('Recipe loaded from the link');
+  }
+});
 families.update(world.livePlants());
 refreshStats();
 window.addEventListener('resize', () => {

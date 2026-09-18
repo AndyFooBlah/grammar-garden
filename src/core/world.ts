@@ -150,6 +150,8 @@ export interface Plant {
   parents: ParentRef[];
   /** Rule names that mutated when this plant was born. */
   mutated: string[];
+  /** What those mutations were, in plain words. */
+  events?: string[];
   deathReason?: DeathReason;
   dyingTicks?: number;
 }
@@ -162,6 +164,7 @@ export interface LineageRecord {
   generation: number;
   parents: ParentRef[];
   mutated: string[];
+  events?: string[];
   born: number;
   died?: number;
   fate?: DeathReason | 'removed';
@@ -239,6 +242,25 @@ export interface SaveFile {
   nextId: number;
   /** Counts of each plant kind (in KINDS order) sampled every HISTORY_EVERY ticks. */
   history?: number[][];
+  /** Field snapshots for replay, sampled with the history. */
+  recording?: Recording;
+}
+
+/** One plant in a replay frame: id, x, index into the DNA table, growth steps, energy (0-100). */
+export type FramePlant = [number, number, number, number, number];
+
+export interface Frame {
+  tick: number;
+  zones: { kind: WeatherKind; moisture: number }[];
+  plants: FramePlant[];
+  /** Bug kind index (BUG_KINDS order), x, y. */
+  bugs: [number, number, number][];
+}
+
+export interface Recording {
+  /** DNA strings referenced by frames, so repeated recipes are stored once. */
+  dnas: string[];
+  frames: Frame[];
 }
 
 /** How often (ticks) the kind mix is sampled, and how many samples are kept. */
@@ -265,6 +287,9 @@ export class World {
   nextId = 1;
   /** Kind mix over time, one row of counts (KINDS order) per sample. */
   history: number[][] = [];
+  /** Replay frames, one per history sample. */
+  recording: Recording = { dnas: [], frames: [] };
+  private dnaIndex = new Map<string, number>();
   rng: Rng;
   /** Sunlight map from the last update; null before the first tick. */
   light: LightMap | null = null;
@@ -414,7 +439,7 @@ export class World {
 
   addSeed(
     dna: string,
-    opts: { x?: number; near?: number; parents?: ParentRef[]; generation?: number; mutated?: string[]; silent?: boolean } = {},
+    opts: { x?: number; near?: number; parents?: ParentRef[]; generation?: number; mutated?: string[]; events?: string[]; silent?: boolean } = {},
   ): Plant | null {
     const x = opts.x ?? this.findFreeX(opts.near);
     if (x === null) return null;
@@ -433,6 +458,7 @@ export class World {
       generation: opts.generation ?? 0,
       parents: opts.parents ?? [],
       mutated: opts.mutated ?? [],
+      events: opts.events ?? [],
     };
     this.plants.push(plant);
     this.lineage.set(plant.id, {
@@ -442,6 +468,7 @@ export class World {
       generation: plant.generation,
       parents: plant.parents.map((r) => ({ ...r })),
       mutated: [...plant.mutated],
+      events: [...(plant.events ?? [])],
       born: this.tick,
     });
     this.pruneLineage();
@@ -477,10 +504,12 @@ export class World {
     if (!plant || plant.stage === 'dying') return [];
     plant.dna = formatDna(parseDna(dna));
     plant.mutated = [];
+    plant.events = [];
     const rec = this.lineage.get(id);
     if (rec) {
       rec.dna = plant.dna;
       rec.mutated = [];
+      rec.events = [];
     }
     const events = this.regrow(plant);
     this.updateLight();
@@ -577,6 +606,67 @@ export class World {
     const counts = this.kindCounts();
     this.history.push(KINDS.map((k) => counts[k]));
     if (this.history.length > HISTORY_CAP) this.history.splice(0, this.history.length - HISTORY_CAP);
+    this.recording.frames.push(this.snapshot());
+    if (this.recording.frames.length > HISTORY_CAP) this.recording.frames.splice(0, this.recording.frames.length - HISTORY_CAP);
+  }
+
+  private dnaId(dna: string): number {
+    let i = this.dnaIndex.get(dna);
+    if (i === undefined) {
+      i = this.recording.dnas.length;
+      this.recording.dnas.push(dna);
+      this.dnaIndex.set(dna, i);
+    }
+    return i;
+  }
+
+  /** A compact picture of the field right now. */
+  snapshot(): Frame {
+    return {
+      tick: this.tick,
+      zones: this.zones.map((z) => ({ kind: z.kind, moisture: Math.round(z.moisture * 100) / 100 })),
+      plants: this.livePlants().map((p) => [p.id, Math.round(p.x), this.dnaId(p.dna), p.steps, Math.round(p.energy)]),
+      bugs: this.bugs.map((b) => [BUG_KINDS.indexOf(b.kind), Math.round(b.x), Math.round(b.y)]),
+    };
+  }
+
+  /** Rebuild a drawable world from a replay frame. Not for simulating, only for looking at. */
+  static fromFrame(frame: Frame, dnas: string[], settings: Settings): World {
+    const w = new World(settings, 1);
+    w.tick = frame.tick;
+    w.zones = frame.zones.map((z) => ({ kind: z.kind, ticksLeft: 1, moisture: z.moisture }));
+    w.plants = frame.plants.map(([id, x, dna, steps, energy]) => ({
+      id,
+      name: '',
+      dna: dnas[dna] ?? 'A=',
+      x,
+      steps,
+      age: 0,
+      energy,
+      sun: 0,
+      upkeep: 0,
+      thirst: 0,
+      stage: steps === 0 ? 'seed' : 'mature',
+      generation: 0,
+      parents: [],
+      mutated: [],
+    }));
+    w.bugs = frame.bugs.map(([kind, x, y], i) => ({
+      id: -1 - i,
+      kind: BUG_KINDS[kind] ?? 'bee',
+      x,
+      y,
+      px: x,
+      py: y,
+      tx: x,
+      ty: y,
+      targetPlant: null,
+      targetFlower: 0,
+      carrying: null,
+      rest: 0,
+    }));
+    w.updateLight();
+    return w;
   }
 
   private advanceWeather(events: WorldEvent[]): void {
@@ -823,7 +913,7 @@ export class World {
     if (bug.carrying.plantId === plant.id && !this.settings.allowSelfing) return;
     const mother = bug.carrying;
     const childRules = crossover(parseDna(mother.dna), parseDna(plant.dna), this.rng);
-    const { rules, mutated } = mutate(childRules, this.settings.mutationRate, this.rng);
+    const { rules, mutated, events: mutationEvents } = mutate(childRules, this.settings.mutationRate, this.rng);
     bug.carrying = null;
     // The seed falls near one parent or the other, so pollen from far away can seed its home patch.
     const child = this.addSeed(formatDna(rules), {
@@ -834,6 +924,7 @@ export class World {
       ],
       generation: Math.max(mother.generation, plant.generation) + 1,
       mutated,
+      events: mutationEvents,
       silent: true,
     });
     if (child) {
@@ -871,6 +962,7 @@ export class World {
       lineage: [...this.lineage.values()].map((r) => ({ ...r, parents: r.parents.map((p) => ({ ...p })), mutated: [...r.mutated] })),
       nextId: this.nextId,
       history: this.history.map((row) => [...row]),
+      recording: { dnas: [...this.recording.dnas], frames: this.recording.frames.map((f) => ({ ...f, zones: f.zones.map((z) => ({ ...z })), plants: f.plants.map((p) => [...p] as FramePlant), bugs: f.bugs.map((b) => [...b] as [number, number, number]) })) },
     };
   }
 
@@ -905,6 +997,10 @@ export class World {
     }
     w.nextId = data.nextId;
     if (data.version === 3 && data.history) w.history = data.history.map((row) => [...row]);
+    if (data.version === 3 && data.recording) {
+      w.recording = { dnas: [...data.recording.dnas], frames: data.recording.frames.map((f) => ({ ...f })) };
+      w.recording.dnas.forEach((d, i) => w.dnaIndex.set(d, i));
+    }
     w.syncBugs();
     w.updateLight();
     return w;

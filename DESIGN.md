@@ -41,6 +41,7 @@ Each rule is `Variable=replacement`. The start string is always `A`.
 | `w` | Pen color = brown (wood) | Wood is what holds the plant up |
 | `y` | Put a yellow flower here | Draws a small yellow dot at the current position |
 | `p` | Put a pink flower here | Draws a small pink dot |
+| `v` | Put a violet flower here | Draws a small violet dot; beetles visit these (v6) |
 
 Anything else (spaces, unknown characters) is ignored so that editing is forgiving.
 
@@ -114,6 +115,18 @@ The default field is now 3,600 px wide (three screens) with room for 120 plants 
 - Picking a plant from the population card, the family tree, or a parent link scrolls the view to it.
 - The field width for *new* gardens is a slider in settings (1,200 to 12,000 px).
 
+## 3e. Beetles (v6)
+
+The two-climate design had a hole: bees and butterflies only fly in sunshine, so an 80%-rain zone had plants but almost no pollination (about 12% of all births). **Beetles** fix it. They visit **violet** flowers (`v`), work in any weather, fly at half speed and stay low. Defaults: 4 bees, 4 butterflies, 3 beetles. With beetles the wet side's share of births rises to about a quarter and woody trees reappear there. A recipe with all three flower colours can be pollinated by any bug, but pays upkeep and water for every flower.
+
+## 3f. Record and replay (v6)
+
+Every 5 ticks, alongside the kinds history, the world stores a compact **frame**: each living plant as `[id, x, recipe index, growth steps, energy]` against a shared recipe table, plus the zones and bug positions. The last 600 frames (3,000 ticks) are kept and saved with the garden. The **Replay** card pauses the live garden and rebuilds any frame into a drawable world (plants are a pure function of recipe and step count, so a frame is enough), with a scrubber, play/pause at a fifth of a tick per frame, and a cursor on the kinds chart. Panning and zooming work during replay; selecting does not. "Back to live" or Play returns to the live garden.
+
+## 3g. Balance harness (v6)
+
+`npm run sim` runs `scripts/sim.ts`: several seeds, thousands of ticks, headless, printing population per zone, births per zone, deaths by cause, families, top generation, kinds, average water need and woodiness per zone, and optionally the top recipes or a CSV. Every setting can be overridden with `--set key=value`. Any balance change should be judged with it before it ships.
+
 ## 4. Life cycle of a plant
 
 ```
@@ -138,7 +151,7 @@ Buttons: **Play/Pause**, **Step one tick**, **Make it rain now**, and a speed sl
 
 ## 6. Bugs and reproduction
 
-- **Bees** are yellow and only visit yellow flowers. **Butterflies** are pink and only visit pink flowers. Counts of each are world settings (default 2 and 2).
+- **Bees** are yellow and only visit yellow flowers. **Butterflies** are pink and only visit pink flowers. **Beetles** (v6) are dark and only visit violet flowers, and they work in the rain. Counts of each are world settings (default 4, 4 and 3).
 - Each bug wanders. On each sunny tick it may pick a target: a random flower of its color, weighted by how many flowers each plant has (more flowers, more visits — a visible selection pressure).
 - When a bug arrives at a flower:
   - If it is **carrying nothing**, it picks up that plant's DNA (a little glow on the bug shows it is carrying).
@@ -171,7 +184,7 @@ On top of that, with probability half the mutation rate, the **genome itself** c
 - **housekeeping**: a rule that nothing refers to any more is dropped;
 - **transposition**: a balanced chunk is cut from one rule and pasted into another.
 
-A recipe never has more than eight letters. Brackets are always inserted and deleted as matched pairs so rules stay well-formed. The inspector marks mutated rules with a small ✨ (new letters included) so it is easy to spot what changed compared with the parents.
+A recipe never has more than eight letters. Brackets are always inserted and deleted as matched pairs so rules stay well-formed. Each event is recorded in plain words on the plant and in the lineage archive (v6), so the inspector and the family tree can say "rule B gained a symbol" or "gene duplication: D copied from a rule and wired into A" rather than just ✨.
 
 ## 7. Screen layout
 
@@ -206,6 +219,8 @@ A recipe never has more than eight letters. Brackets are always inserted and del
 - **Field (left, most of the screen).** Two skies, one per climate zone, show each zone's weather. The ground line is about 15% from the bottom; seeds sit on it and plants grow upward. Plants are plain 2-px lines (green / brown), flowers are 4-px dots (yellow / pink), bugs are simple shapes (a striped yellow oval, a pink two-triangle butterfly). Click anything to select it; the selection gets a soft halo. Nothing needs precise clicking: the nearest plant within a generous radius is picked.
 - **Inspector.** A close-up of the selected plant, auto-fitted, with segments drawn thicker. Auto-generated friendly name ("Zippy", "Bramble", "Pip") plus generation, age, health, status, parents (clickable to select them), and a count of flowers.
 - **DNA editor.** A large-font textarea showing one rule per line (the saved file keeps them `;`-separated; the parser accepts either). As you type, the close-up redraws at the plant's current growth step and shows ✔ or the specific problem. **Apply** replaces the plant's DNA and regrows it from seed in place. **Clone to seed** drops a new seed with a copy of the DNA at a free spot (a great way to say "I like this one, make more"). **✕** removes the plant. **Surprise me** fills the editor with a random recipe.
+- **Share (v6).** A button copies a link with the editor's recipe in the URL hash; opening such a link puts the recipe into the seed designer. The hash is cleared after loading so the link isn't re-applied on reload.
+- **Climate presets (v6).** One-click experiments in the settings card: desert & rainforest (the default), temperate, two deserts, two rainforests, free flowers, weak stems, no thirst. Each applies a few settings on top of the current ones.
 - **World settings.** Sliders with plain labels: sun length, rain length, plant lifespan, bees, butterflies, room for plants, seed spacing, growth steps, recipe size limit, turn angle, step size, green stem strength, sun strength, light in rain, cost of living, cost per flower, cost per wood bit, seed energy, mutation chance, bug curiosity, allow self-pollination. Speed is its own slider at the top, shown as ticks per second. Changing a geometric setting (angle, step, load) regrows every plant so the effect is instantly visible.
 - **Legend.** A one-card cheat sheet of the symbols, in plain words, with three or four starter recipes you can click to load into the editor.
 - **New seed** button: plants a seed with the editor's current DNA (or a random one) at a free spot.
@@ -311,6 +326,7 @@ Also a handful of fully random recipes, so the first pollination round is alread
 9. Recipe size limit defaults to 200 symbols.
 10. (v2) Sunlight-and-energy model replaces root shading; seed spacing is dense and shade enforces distance.
 11. (v3) Two climate zones with soil moisture and thirst; a three-screen field with a pan/zoom camera.
+12. (v6) Beetles and violet flowers; replay; balance harness in the repo; share links; climate presets; mutation events in words.
 
 ## 14. Open question
 
